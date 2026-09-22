@@ -179,12 +179,14 @@ func (p *northflankProvider) Configure(ctx context.Context, req provider.Configu
 func (p *northflankProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewProjectResource,
+		NewSecretGroupResource,
 	}
 }
 
 func (p *northflankProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewProjectDataSource,
+		NewSecretGroupDataSource,
 	}
 }
 

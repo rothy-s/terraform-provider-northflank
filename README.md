@@ -10,17 +10,19 @@ through a client generated from Northflank's own OpenAPI document.
 ## Status
 
 Early. The generated client covers the whole API; the provider exposes the
-first resource and data source on top of it. Behaviour is covered by unit
+first resources and data sources on top of it. Behaviour is covered by unit
 tests, tests against a fake API server and an offline plan, but not yet by
 acceptance tests against the live API.
 
-| Resource             | Update                                    |
-| -------------------- | ----------------------------------------- |
-| `northflank_project` | `description`, `color`; others replace    |
+| Resource                  | Update                                 |
+| ------------------------- | -------------------------------------- |
+| `northflank_project`      | `description`, `color`; others replace |
+| `northflank_secret_group` | all but `project_id` and `name`        |
 
-| Data source          | Lookup keys      |
-| -------------------- | ---------------- |
-| `northflank_project` | `id`, or `name`  |
+| Data source               | Lookup keys                      |
+| ------------------------- | -------------------------------- |
+| `northflank_project`      | `id`, or `name`                  |
+| `northflank_secret_group` | `project_id` + (`id` or `name`)  |
 
 A few things worth knowing about projects:
 
@@ -31,6 +33,14 @@ A few things worth knowing about projects:
   deleted with it.
 - **`color` drift is not detected.** The API accepts a color but does not
   report it when reading a project.
+
+And about secret groups:
+
+- **Variable values are stored in Terraform state.** Treat state as a secret.
+- **Only the group's own variables are managed.** Values inherited from linked
+  addons are never read into state.
+- **Files and docker secret mounts are not supported yet**, nor are addon
+  links.
 
 ## Usage
 

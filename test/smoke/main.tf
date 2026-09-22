@@ -50,3 +50,39 @@ resource "northflank_project" "byoc" {
 data "northflank_project" "by_id" {
   id = northflank_project.smoke.id
 }
+
+resource "northflank_secret_group" "shared" {
+  project_id = northflank_project.smoke.id
+  name       = "Smoke Shared"
+  type       = "config"
+  tags       = ["smoke"]
+
+  variables = {
+    LOG_LEVEL = "debug"
+  }
+}
+
+resource "northflank_secret_group" "restricted" {
+  project_id  = northflank_project.smoke.id
+  name        = "Smoke Restricted"
+  priority    = 20
+  secret_type = "environment"
+
+  variables = {
+    DATABASE_URL = "postgres://placeholder"
+  }
+
+  restrictions = {
+    restricted          = true
+    tags                = ["backend"]
+    tag_match_condition = "or"
+    resources = [
+      { id = "api", type = "service" },
+    ]
+  }
+}
+
+data "northflank_secret_group" "by_id" {
+  project_id = northflank_project.smoke.id
+  id         = northflank_secret_group.shared.id
+}

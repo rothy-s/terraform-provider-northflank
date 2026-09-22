@@ -1,10 +1,27 @@
-TODO list:
+# TODO
+
+## Org (pri 2)
+
+* Team datasource
+
+## Team (pri 3)
 
 * Project resource (done)
 * Project datasource (done)
-* Secret group resource
-* Secret group datasource
+* Tags?
+* Cloud Providers?
+* Domains?
+* Egress IPs?
+
+## Project (pri 1)
+
+* Secret group resource (done)
+* Secret group datasource (done)
 * Job resource
 * Job datasource
 * Service resource
 * Service datasource
+* Addon resource
+* Addon datasource
+* Volume resource
+* Volume datasource

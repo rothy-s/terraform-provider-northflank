@@ -121,6 +121,14 @@ if missing_data:
         + "\n       add them to test/smoke/main.tf"
     )
 
+# Secret variables must never surface in plan output.
+for change in plan.get("resource_changes", []):
+    if change["type"] != "northflank_secret_group":
+        continue
+    after_sensitive = change["change"].get("after_sensitive")
+    if not (isinstance(after_sensitive, dict) and after_sensitive.get("variables")):
+        sys.exit(f"smoke: {change['address']} does not mark `variables` as sensitive")
+
 print(
     f"smoke: OK -- planned {len(planned)} resource types "
     f"({', '.join(sorted(planned)) or 'none registered yet'}) and {len(read)} data sources"
