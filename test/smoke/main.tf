@@ -258,3 +258,19 @@ data "northflank_volume" "by_id" {
   project_id = northflank_project.smoke.id
   id         = northflank_volume.data.id
 }
+
+resource "northflank_addon" "db" {
+  project_id      = northflank_project.smoke.id
+  name            = "Smoke DB"
+  type            = "postgresql"
+  version         = "16"
+  deployment_plan = "nf-compute-20"
+  storage_size    = 4096
+  tls_enabled     = true
+  database_name   = "smoke"
+}
+
+data "northflank_addon" "by_id" {
+  project_id = northflank_project.smoke.id
+  id         = northflank_addon.db.id
+}

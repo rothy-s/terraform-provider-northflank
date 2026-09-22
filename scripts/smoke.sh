@@ -147,6 +147,18 @@ for change in plan.get("resource_changes", []):
         if not (isinstance(after_sensitive, dict) and after_sensitive.get(attribute)):
             sys.exit(f"smoke: {change['address']} does not mark `{attribute}` as sensitive")
 
+# Addon credentials are computed, so they are unknown in the plan; they must
+# still be declared sensitive in the schema.
+schema_check = {"northflank_addon": ("secrets", "connection_details")}
+for change in plan.get("resource_changes", []):
+    attributes = schema_check.get(change["type"])
+    if not attributes or change.get("mode") != "managed":
+        continue
+    after_sensitive = change["change"].get("after_sensitive") or {}
+    for attribute in attributes:
+        if not after_sensitive.get(attribute):
+            sys.exit(f"smoke: {change['address']} does not mark `{attribute}` as sensitive")
+
 print(
     f"smoke: OK -- planned {len(planned)} resource types "
     f"({', '.join(sorted(planned)) or 'none registered yet'}) and {len(read)} data sources"

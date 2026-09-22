@@ -57,6 +57,14 @@ caveat that minor releases may still break.
   attach and detach endpoints. Supports import as `<project_id>/<volume_id>`.
 - `northflank_volume` data source: looks up a volume by `id` or `name` within
   a project.
+- `northflank_addon` resource: a native Northflank addon (PostgreSQL, MySQL,
+  MongoDB, Redis and so on) with its version, plan, replicas, storage and
+  networking, and its credentials as sensitive computed maps. Create and
+  update wait until the addon runs; destroy waits until it is gone. Updates
+  are PATCHes carrying only what changed. Supports import as
+  `<project_id>/<addon_id>`.
+- `northflank_addon` data source: looks up an addon by `id` or `name` within
+  a project, including its credentials.
 - `northflank_service` data source: looks up a service of any kind by `id` or
   `name` within a project, including its repository and branch.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with

@@ -23,6 +23,7 @@ acceptance tests against the live API.
 | `northflank_build_service`      | all but `project_id` and `name`           |
 | `northflank_combined_service`   | all but `project_id` and `name`           |
 | `northflank_volume`             | size, mounts, attachments; others replace |
+| `northflank_addon`              | all but `project_id`, `name`, `type`, `database_name` |
 
 | Data source               | Lookup keys                     |
 | ------------------------- | ------------------------------- |
@@ -31,6 +32,7 @@ acceptance tests against the live API.
 | `northflank_job`          | `project_id` + (`id` or `name`) |
 | `northflank_service`      | `project_id` + (`id` or `name`) |
 | `northflank_volume`       | `project_id` + (`id` or `name`) |
+| `northflank_addon`        | `project_id` + (`id` or `name`) |
 
 A few things worth knowing about projects:
 
@@ -113,6 +115,26 @@ And about volumes:
 - **Tags are not supported**, since the API only takes them at creation and a
   change would mean replacing the volume. Nor are backup schedules or restoring
   from a backup yet.
+
+And about addons:
+
+- **Native addons only**: managed databases, caches and queues such as
+  PostgreSQL, MySQL, MongoDB and Redis. Bring-your-own template addons and
+  managed buckets are not supported yet.
+- **Applies wait for the addon.** Create and update wait until it is
+  `running` (up to 30 minutes), so that dependants get working credentials;
+  destroy waits until it is gone, so that the project can be deleted after it.
+- **Updates use PATCH** with only the attributes that changed, to disturb a
+  running database as little as possible. Changing `version` upgrades in
+  place; a prefix such as `16` stays as written while the addon runs a `16.x`
+  release.
+- **Destroying an addon deletes its data**, and so does changing `name`,
+  `type`, `project_id` or `database_name`.
+- **Credentials are read into state** as the sensitive maps `secrets` and
+  `connection_details`, whose keys depend on the addon type.
+- **Not supported yet:** backup schedules, IP policies, disk autoscaling,
+  type-specific settings (such as PostgreSQL connection poolers or Redis
+  Sentinel), forking from a backup, and secret rotation.
 
 ## Usage
 

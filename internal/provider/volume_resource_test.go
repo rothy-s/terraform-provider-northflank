@@ -36,8 +36,12 @@ func TestVolumePayloadsMatchSpec(t *testing.T) {
 
 	t.Run("create", func(t *testing.T) { roundTrip(t, create, &northflank.PostProjectsVolumesJSONRequestBody{}) })
 	t.Run("update", func(t *testing.T) { roundTrip(t, update, &northflank.PostProjectsVolumesVolumeidJSONRequestBody{}) })
-	t.Run("attach", func(t *testing.T) { roundTrip(t, attach, &northflank.PostProjectsVolumesVolumeidAttachJSONRequestBody{}) })
-	t.Run("detach", func(t *testing.T) { roundTrip(t, attach, &northflank.PostProjectsVolumesVolumeidDetachJSONRequestBody{}) })
+	t.Run("attach", func(t *testing.T) {
+		roundTrip(t, attach, &northflank.PostProjectsVolumesVolumeidAttachJSONRequestBody{})
+	})
+	t.Run("detach", func(t *testing.T) {
+		roundTrip(t, attach, &northflank.PostProjectsVolumesVolumeidDetachJSONRequestBody{})
+	})
 }
 
 func TestAttachmentChanges(t *testing.T) {
