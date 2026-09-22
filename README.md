@@ -22,6 +22,7 @@ acceptance tests against the live API.
 | `northflank_deployment_service` | all but `project_id` and `name`           |
 | `northflank_build_service`      | all but `project_id` and `name`           |
 | `northflank_combined_service`   | all but `project_id` and `name`           |
+| `northflank_volume`             | size, mounts, attachments; others replace |
 
 | Data source               | Lookup keys                     |
 | ------------------------- | ------------------------------- |
@@ -29,6 +30,7 @@ acceptance tests against the live API.
 | `northflank_secret_group` | `project_id` + (`id` or `name`) |
 | `northflank_job`          | `project_id` + (`id` or `name`) |
 | `northflank_service`      | `project_id` + (`id` or `name`) |
+| `northflank_volume`       | `project_id` + (`id` or `name`) |
 
 A few things worth knowing about projects:
 
@@ -84,16 +86,33 @@ And about services:
   provider does not manage.
 - **A combined service redeploys on every push** to its branch unless
   `disable_ci` is set, independently of Terraform.
-- **Destroying a service keeps its volumes.** Volumes are not managed yet, so
-  the provider never asks Northflank to delete them.
+- **Destroying a service keeps its volumes.** Volumes are managed separately,
+  by `northflank_volume`, so the provider never asks Northflank to delete them
+  along with a service.
 - **Autoscaling** (deployment and combined services) scales between
   `min_replicas` and `max_replicas` on CPU, memory, requests per second or
   custom Prometheus metrics. While it is on, `instances` is not read back,
   since the autoscaler owns the count. Removing a CPU, memory or request-rate
   trigger switches it off explicitly; the API cannot switch off custom metrics
   without their settings, so removing that block only stops sending it.
-- **Not supported yet:** volumes, port security (basic auth, IP policies,
+- **Not supported yet:** per-replica (stateful set) volumes, port security (basic auth, IP policies,
   SSO), GPUs, secret files, path ignore rules and bundle builds.
+
+And about volumes:
+
+- **Destroying a volume deletes its data**, and so does anything that forces a
+  replacement: changing `name`, `project_id`, `access_mode` or
+  `storage_class`. Use `lifecycle { prevent_destroy = true }`.
+- **Size and mounts update in place** through
+  `POST /v1/projects/{projectId}/volumes/{volumeId}`; attachments through the
+  attach and detach endpoints, detaching first so a `ReadWriteOnce` volume can
+  move between workloads. Attaching a volume restarts the service.
+- **Mounts are write-only.** The API does not report them, so changes made
+  outside Terraform are not detected. Size, storage class and attachments are
+  read back.
+- **Tags are not supported**, since the API only takes them at creation and a
+  change would mean replacing the volume. Nor are backup schedules or restoring
+  from a backup yet.
 
 ## Usage
 

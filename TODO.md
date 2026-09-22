@@ -29,5 +29,5 @@
 * Service auto-scaling (done)
 * Addon resource
 * Addon datasource
-* Volume resource
-* Volume datasource
+* Volume resource (done)
+* Volume datasource (done)

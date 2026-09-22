@@ -51,6 +51,12 @@ caveat that minor releases may still break.
   `min_replicas` and `max_replicas`, on CPU, memory, requests per second or
   custom Prometheus metrics. At least one trigger is required and the replica
   range is checked at plan time.
+- `northflank_volume` resource: a persistent volume with its size, storage
+  class, access mode, mounts and the services or jobs it is attached to.
+  Size and mounts update in place; attachments are reconciled through the
+  attach and detach endpoints. Supports import as `<project_id>/<volume_id>`.
+- `northflank_volume` data source: looks up a volume by `id` or `name` within
+  a project.
 - `northflank_service` data source: looks up a service of any kind by `id` or
   `name` within a project, including its repository and branch.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with

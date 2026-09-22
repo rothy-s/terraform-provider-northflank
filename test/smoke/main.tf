@@ -239,3 +239,22 @@ resource "northflank_combined_service" "web" {
     SMOKE = "true"
   }
 }
+
+resource "northflank_volume" "data" {
+  project_id   = northflank_project.smoke.id
+  name         = "Smoke Data"
+  storage_size = 4096
+
+  mounts = [
+    { container_path = "/data" },
+  ]
+
+  attachments = [
+    { id = northflank_deployment_service.web.id, type = "service" },
+  ]
+}
+
+data "northflank_volume" "by_id" {
+  project_id = northflank_project.smoke.id
+  id         = northflank_volume.data.id
+}

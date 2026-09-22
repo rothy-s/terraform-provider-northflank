@@ -184,6 +184,7 @@ func (p *northflankProvider) Resources(_ context.Context) []func() resource.Reso
 		NewDeploymentServiceResource,
 		NewBuildServiceResource,
 		NewCombinedServiceResource,
+		NewVolumeResource,
 	}
 }
 
@@ -193,6 +194,7 @@ func (p *northflankProvider) DataSources(_ context.Context) []func() datasource.
 		NewSecretGroupDataSource,
 		NewJobDataSource,
 		NewServiceDataSource,
+		NewVolumeDataSource,
 	}
 }
 
