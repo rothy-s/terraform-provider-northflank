@@ -133,6 +133,17 @@ resource "northflank_deployment_service" "web" {
   deployment_plan = "nf-compute-20"
   instances       = 2
 
+  autoscaling = {
+    min_replicas                = 2
+    max_replicas                = 4
+    memory_threshold_percentage = 80
+    custom_metrics = {
+      path    = "/metrics"
+      port    = 9090
+      metrics = [{ name = "inflight", type = "counter", threshold = 10.5 }]
+    }
+  }
+
   deployment = {
     external_image = {
       image_path = "nginx:latest"

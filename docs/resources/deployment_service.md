@@ -26,7 +26,14 @@ resource "northflank_deployment_service" "api" {
   project_id      = northflank_project.app.id
   name            = "API"
   deployment_plan = "nf-compute-20"
-  instances       = 2
+
+  # Between 2 and 10 instances, scaling on CPU or request rate.
+  autoscaling = {
+    min_replicas                  = 2
+    max_replicas                  = 10
+    cpu_threshold_percentage      = 70
+    requests_per_second_threshold = 200
+  }
 
   deployment = {
     external_image = {
@@ -91,6 +98,9 @@ resource "northflank_deployment_service" "worker" {
 
 ### Optional
 
+- `autoscaling` (Attributes) Scale the number of instances between `min_replicas` and `max_replicas` based on load. Set at least one trigger; the service scales up when any of them is exceeded. Leave the block out to run a fixed number of `instances`.
+
+While autoscaling is on, the autoscaler owns the instance count, so `instances` is not read back. (see [below for nested schema](#nestedatt--autoscaling))
 - `description` (String) Short description of the service, up to 200 characters. Removing it from configuration keeps the current value.
 - `health_checks` (Attributes List) Probes Northflank uses to decide whether an instance is started, alive and ready. (see [below for nested schema](#nestedatt--health_checks))
 - `instances` (Number) Number of instances to run. `0` scales the service down without deleting it. Defaults to `1`.
@@ -138,6 +148,42 @@ Required:
 Optional:
 
 - `credentials_id` (String) ID of saved registry credentials, for a private image.
+
+
+
+<a id="nestedatt--autoscaling"></a>
+### Nested Schema for `autoscaling`
+
+Required:
+
+- `max_replicas` (Number) Most instances to run. Must not be below `min_replicas`.
+- `min_replicas` (Number) Fewest instances to run, at least 1.
+
+Optional:
+
+- `cpu_threshold_percentage` (Number) Scale up when average CPU usage exceeds this percentage of the plan, 10 to 100.
+- `custom_metrics` (Attributes) Scale on Prometheus metrics the service exposes itself. The API cannot switch this trigger off without its settings, so removing the block stops sending it; should Northflank keep it anyway, the next plan shows it as a difference. (see [below for nested schema](#nestedatt--autoscaling--custom_metrics))
+- `memory_threshold_percentage` (Number) Scale up when average memory usage exceeds this percentage of the plan, 10 to 100.
+- `requests_per_second_threshold` (Number) Scale up when requests per second per instance exceed this value.
+
+<a id="nestedatt--autoscaling--custom_metrics"></a>
+### Nested Schema for `autoscaling.custom_metrics`
+
+Required:
+
+- `metrics` (Attributes List) Metrics to scale on. At least one is required. (see [below for nested schema](#nestedatt--autoscaling--custom_metrics--metrics))
+- `path` (String) Path the metrics are served on, such as `/metrics`.
+- `port` (Number) Port the metrics are served on.
+
+<a id="nestedatt--autoscaling--custom_metrics--metrics"></a>
+### Nested Schema for `autoscaling.custom_metrics.metrics`
+
+Required:
+
+- `name` (String) Name of the metric, as exposed.
+- `threshold` (Number) Scale up when the average across instances exceeds this value.
+- `type` (String) `gauge`, used as is, or `counter`, used as a rate per second.
+
 
 
 

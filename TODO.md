@@ -26,7 +26,7 @@
 * Job datasource (done)
 * Service resource (done: deployment, build and combined services)
 * Service datasource (done)
-* Service auto-scaling
+* Service auto-scaling (done)
 * Addon resource
 * Addon datasource
 * Volume resource

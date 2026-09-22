@@ -24,6 +24,19 @@ resource "northflank_combined_service" "web" {
 
   command = "npm start"
 
+  # Scale on a queue-depth gauge the app serves on /metrics.
+  autoscaling = {
+    min_replicas = 1
+    max_replicas = 5
+    custom_metrics = {
+      path = "/metrics"
+      port = 9090
+      metrics = [
+        { name = "queue_depth", type = "gauge", threshold = 100 },
+      ]
+    }
+  }
+
   ports = [
     { name = "http", internal_port = 3000, protocol = "HTTP", public = true },
   ]

@@ -46,6 +46,11 @@ caveat that minor releases may still break.
   repository and runs it, with the same build settings as a build service and
   the same ports, health checks and runtime environment as a deployment
   service.
+- `autoscaling` on `northflank_deployment_service` and
+  `northflank_combined_service`: horizontal autoscaling between
+  `min_replicas` and `max_replicas`, on CPU, memory, requests per second or
+  custom Prometheus metrics. At least one trigger is required and the replica
+  range is checked at plan time.
 - `northflank_service` data source: looks up a service of any kind by `id` or
   `name` within a project, including its repository and branch.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with

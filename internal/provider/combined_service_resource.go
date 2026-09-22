@@ -59,6 +59,7 @@ type combinedServiceModel struct {
 	DisableCI          types.Bool   `tfsdk:"disable_ci"`
 	Command            types.String `tfsdk:"command"`
 	Entrypoint         types.String `tfsdk:"entrypoint"`
+	Autoscaling        types.Object `tfsdk:"autoscaling"`
 	Ports              types.List   `tfsdk:"ports"`
 	HealthChecks       types.List   `tfsdk:"health_checks"`
 	RuntimeEnvironment types.Map    `tfsdk:"runtime_environment"`
@@ -79,6 +80,7 @@ type combinedServicePayload struct {
 	BuildArguments     map[string]string           `json:"buildArguments"`
 	DisabledCI         bool                        `json:"disabledCI"`
 	Deployment         combinedDeploymentPayload   `json:"deployment"`
+	Autoscaling        *autoscalingPayload         `json:"autoscaling"`
 	Ports              []servicePortPayload        `json:"ports"`
 	HealthChecks       []serviceHealthCheckPayload `json:"healthChecks"`
 	RuntimeEnvironment map[string]string           `json:"runtimeEnvironment"`
@@ -202,6 +204,7 @@ func (r *combinedServiceResource) Schema(ctx context.Context, _ resource.SchemaR
 				Optional:            true,
 				MarkdownDescription: "Entrypoint to run instead of the built image's `ENTRYPOINT`.",
 			},
+			"autoscaling":         shared["autoscaling"],
 			"ports":               shared["ports"],
 			"health_checks":       shared["health_checks"],
 			"runtime_environment": shared["runtime_environment"],
@@ -423,6 +426,9 @@ func combinedServicePayloadFrom(ctx context.Context, plan *combinedServiceModel)
 	healthChecks, d := healthChecksPayload(ctx, plan.HealthChecks)
 	diags.Append(d...)
 
+	autoscaling, d := autoscalingPayloadFrom(ctx, plan.Autoscaling, plan.Instances.ValueInt64())
+	diags.Append(d...)
+
 	if diags.HasError() {
 		return nil, diags
 	}
@@ -447,6 +453,7 @@ func combinedServicePayloadFrom(ctx context.Context, plan *combinedServiceModel)
 			Instances: int(plan.Instances.ValueInt64()),
 			Docker:    dockerOverride(knownStringPointer(plan.Command), knownStringPointer(plan.Entrypoint)),
 		},
+		Autoscaling:        autoscaling,
 		Ports:              ports,
 		HealthChecks:       healthChecks,
 		RuntimeEnvironment: map[string]string{},
@@ -481,7 +488,13 @@ func applyCombinedService(ctx context.Context, model *combinedServiceModel, serv
 	model.BuildArguments = stringMapOrNull(ctx, service.BuildArguments, &diags)
 	model.RuntimeEnvironment = stringMapOrNull(ctx, service.RuntimeEnvironment, &diags)
 
-	if service.Deployment != nil {
+	autoscaling, d := autoscalingValue(ctx, service.Autoscaling)
+	diags.Append(d...)
+	model.Autoscaling = autoscaling
+
+	// While autoscaling is on, the autoscaler owns the instance count, so the
+	// reported value would show as drift on every plan.
+	if service.Deployment != nil && autoscaling.IsNull() {
 		model.Instances = types.Int64Value(int64(service.Deployment.Instances))
 	}
 

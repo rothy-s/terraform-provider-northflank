@@ -86,8 +86,14 @@ And about services:
   `disable_ci` is set, independently of Terraform.
 - **Destroying a service keeps its volumes.** Volumes are not managed yet, so
   the provider never asks Northflank to delete them.
-- **Not supported yet:** autoscaling, volumes, port security (basic auth, IP
-  policies, SSO), GPUs, secret files, path ignore rules and bundle builds.
+- **Autoscaling** (deployment and combined services) scales between
+  `min_replicas` and `max_replicas` on CPU, memory, requests per second or
+  custom Prometheus metrics. While it is on, `instances` is not read back,
+  since the autoscaler owns the count. Removing a CPU, memory or request-rate
+  trigger switches it off explicitly; the API cannot switch off custom metrics
+  without their settings, so removing that block only stops sending it.
+- **Not supported yet:** volumes, port security (basic auth, IP policies,
+  SSO), GPUs, secret files, path ignore rules and bundle builds.
 
 ## Usage
 

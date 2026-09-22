@@ -42,6 +42,19 @@ resource "northflank_combined_service" "web" {
 
   command = "npm start"
 
+  # Scale on a queue-depth gauge the app serves on /metrics.
+  autoscaling = {
+    min_replicas = 1
+    max_replicas = 5
+    custom_metrics = {
+      path = "/metrics"
+      port = 9090
+      metrics = [
+        { name = "queue_depth", type = "gauge", threshold = 100 },
+      ]
+    }
+  }
+
   ports = [
     { name = "http", internal_port = 3000, protocol = "HTTP", public = true },
   ]
@@ -79,6 +92,9 @@ resource "northflank_combined_service" "web" {
 
 ### Optional
 
+- `autoscaling` (Attributes) Scale the number of instances between `min_replicas` and `max_replicas` based on load. Set at least one trigger; the service scales up when any of them is exceeded. Leave the block out to run a fixed number of `instances`.
+
+While autoscaling is on, the autoscaler owns the instance count, so `instances` is not read back. (see [below for nested schema](#nestedatt--autoscaling))
 - `build_arguments` (Map of String, Sensitive) Build arguments passed to every build, as a map of name to value. Values shared by several services belong in a `northflank_secret_group` with `secret_type` set to `arguments`.
 - `build_plan` (String) ID of the compute plan builds run on, such as `nf-compute-200`. Northflank picks one when this is not set.
 - `command` (String) Command to run instead of the built image's `CMD`.
@@ -143,6 +159,42 @@ Optional:
 - `account_login` (String) Login of the linked Git account to use, when several accounts of the same provider are linked. Northflank picks one with access otherwise.
 - `self_hosted_vcs_id` (String) ID of the self-hosted Git server, when `provider` is `self-hosted`.
 - `vcs_link_id` (String) ID of the linked Git account to use, as an alternative to `account_login`.
+
+
+<a id="nestedatt--autoscaling"></a>
+### Nested Schema for `autoscaling`
+
+Required:
+
+- `max_replicas` (Number) Most instances to run. Must not be below `min_replicas`.
+- `min_replicas` (Number) Fewest instances to run, at least 1.
+
+Optional:
+
+- `cpu_threshold_percentage` (Number) Scale up when average CPU usage exceeds this percentage of the plan, 10 to 100.
+- `custom_metrics` (Attributes) Scale on Prometheus metrics the service exposes itself. The API cannot switch this trigger off without its settings, so removing the block stops sending it; should Northflank keep it anyway, the next plan shows it as a difference. (see [below for nested schema](#nestedatt--autoscaling--custom_metrics))
+- `memory_threshold_percentage` (Number) Scale up when average memory usage exceeds this percentage of the plan, 10 to 100.
+- `requests_per_second_threshold` (Number) Scale up when requests per second per instance exceed this value.
+
+<a id="nestedatt--autoscaling--custom_metrics"></a>
+### Nested Schema for `autoscaling.custom_metrics`
+
+Required:
+
+- `metrics` (Attributes List) Metrics to scale on. At least one is required. (see [below for nested schema](#nestedatt--autoscaling--custom_metrics--metrics))
+- `path` (String) Path the metrics are served on, such as `/metrics`.
+- `port` (Number) Port the metrics are served on.
+
+<a id="nestedatt--autoscaling--custom_metrics--metrics"></a>
+### Nested Schema for `autoscaling.custom_metrics.metrics`
+
+Required:
+
+- `name` (String) Name of the metric, as exposed.
+- `threshold` (Number) Scale up when the average across instances exceeds this value.
+- `type` (String) `gauge`, used as is, or `counter`, used as a rate per second.
+
+
 
 
 <a id="nestedatt--health_checks"></a>

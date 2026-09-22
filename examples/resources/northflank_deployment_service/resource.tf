@@ -8,7 +8,14 @@ resource "northflank_deployment_service" "api" {
   project_id      = northflank_project.app.id
   name            = "API"
   deployment_plan = "nf-compute-20"
-  instances       = 2
+
+  # Between 2 and 10 instances, scaling on CPU or request rate.
+  autoscaling = {
+    min_replicas                  = 2
+    max_replicas                  = 10
+    cpu_threshold_percentage      = 70
+    requests_per_second_threshold = 200
+  }
 
   deployment = {
     external_image = {

@@ -55,6 +55,7 @@ type deploymentServiceModel struct {
 	DeploymentPlan     types.String `tfsdk:"deployment_plan"`
 	Instances          types.Int64  `tfsdk:"instances"`
 	Deployment         types.Object `tfsdk:"deployment"`
+	Autoscaling        types.Object `tfsdk:"autoscaling"`
 	Ports              types.List   `tfsdk:"ports"`
 	HealthChecks       types.List   `tfsdk:"health_checks"`
 	RuntimeEnvironment types.Map    `tfsdk:"runtime_environment"`
@@ -69,6 +70,7 @@ type deploymentServicePayload struct {
 	Tags               []string                    `json:"tags"`
 	Billing            jobBillingPayload           `json:"billing"`
 	Deployment         serviceDeploymentPayload    `json:"deployment"`
+	Autoscaling        *autoscalingPayload         `json:"autoscaling"`
 	Ports              []servicePortPayload        `json:"ports"`
 	HealthChecks       []serviceHealthCheckPayload `json:"healthChecks"`
 	RuntimeEnvironment map[string]string           `json:"runtimeEnvironment"`
@@ -176,6 +178,7 @@ func (r *deploymentServiceResource) Schema(_ context.Context, _ resource.SchemaR
 			},
 			"deployment": deploymentSourceAttribute("What the service runs. Set exactly one of `external_image` " +
 				"or `build_service`."),
+			"autoscaling": autoscalingAttribute(),
 			"ports": schema.ListNestedAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -520,6 +523,9 @@ func deploymentServicePayloadFrom(ctx context.Context, plan *deploymentServiceMo
 	healthChecks, d := healthChecksPayload(ctx, plan.HealthChecks)
 	diags.Append(d...)
 
+	autoscaling, d := autoscalingPayloadFrom(ctx, plan.Autoscaling, plan.Instances.ValueInt64())
+	diags.Append(d...)
+
 	if diags.HasError() {
 		return nil, diags
 	}
@@ -533,6 +539,7 @@ func deploymentServicePayloadFrom(ctx context.Context, plan *deploymentServiceMo
 			deploymentPayload: *deployment,
 			Instances:         int(plan.Instances.ValueInt64()),
 		},
+		Autoscaling:        autoscaling,
 		Ports:              ports,
 		HealthChecks:       healthChecks,
 		RuntimeEnvironment: map[string]string{},
@@ -561,7 +568,13 @@ func applyDeploymentService(ctx context.Context, model *deploymentServiceModel, 
 	diags.Append(d...)
 	model.Tags = tags
 
-	if service.Deployment != nil {
+	autoscaling, d := autoscalingValue(ctx, service.Autoscaling)
+	diags.Append(d...)
+	model.Autoscaling = autoscaling
+
+	// While autoscaling is on, the autoscaler owns the instance count, so the
+	// reported value would show as drift on every plan.
+	if service.Deployment != nil && autoscaling.IsNull() {
 		model.Instances = types.Int64Value(int64(service.Deployment.Instances))
 	}
 

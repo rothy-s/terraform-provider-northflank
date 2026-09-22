@@ -103,6 +103,7 @@ type serviceRead struct {
 		} `json:"docker"`
 	} `json:"deployment"`
 
+	Autoscaling        *autoscalingPayload         `json:"autoscaling"`
 	Ports              []servicePortPayload        `json:"ports"`
 	HealthChecks       []serviceHealthCheckPayload `json:"healthChecks"`
 	RuntimeEnvironment map[string]string           `json:"runtimeEnvironment"`
