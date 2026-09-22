@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"regexp"
 	"time"
 
 	"github.com/srs/terraform-provider-northflank/internal/apierr"
@@ -18,11 +17,7 @@ var (
 	// characters long.
 	jobNamePattern = projectNamePattern
 
-	// A build service in this project ("my-builder"), or in another one
-	// ("other-project/my-builder").
-	jobBuildServicePattern = regexp.MustCompile(`^([a-zA-Z0-9]+(-[a-zA-Z0-9]+)*/)?[a-zA-Z](-?[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*)?$`)
-	jobBuildSHAPattern     = regexp.MustCompile(`^([a-fA-F0-9]{40}|latest)$`)
-	jobPlanPattern         = secretGroupIdentifierPattern
+	jobPlanPattern = secretGroupIdentifierPattern
 )
 
 const (
@@ -34,40 +29,17 @@ const (
 // take the same schema. It is hand-written for the same reason as the secret
 // group payload, and a test checks it against the generated types.
 type jobPayload struct {
-	Name               string               `json:"name"`
-	Description        *string              `json:"description,omitempty"`
-	Tags               []string             `json:"tags"`
-	Billing            jobBillingPayload    `json:"billing"`
-	Deployment         jobDeploymentPayload `json:"deployment"`
-	Settings           jobSettingsPayload   `json:"settings"`
-	RuntimeEnvironment map[string]string    `json:"runtimeEnvironment"`
+	Name               string             `json:"name"`
+	Description        *string            `json:"description,omitempty"`
+	Tags               []string           `json:"tags"`
+	Billing            jobBillingPayload  `json:"billing"`
+	Deployment         deploymentPayload  `json:"deployment"`
+	Settings           jobSettingsPayload `json:"settings"`
+	RuntimeEnvironment map[string]string  `json:"runtimeEnvironment"`
 }
 
 type jobBillingPayload struct {
 	DeploymentPlan string `json:"deploymentPlan"`
-}
-
-type jobDeploymentPayload struct {
-	External *jobExternalPayload `json:"external,omitempty"`
-	Internal *jobInternalPayload `json:"internal,omitempty"`
-	Docker   *jobDockerPayload   `json:"docker,omitempty"`
-}
-
-type jobExternalPayload struct {
-	ImagePath   string  `json:"imagePath"`
-	Credentials *string `json:"credentials,omitempty"`
-}
-
-type jobInternalPayload struct {
-	ID       string  `json:"id"`
-	Branch   *string `json:"branch,omitempty"`
-	BuildSHA *string `json:"buildSHA,omitempty"`
-}
-
-type jobDockerPayload struct {
-	ConfigType       string  `json:"configType"`
-	CustomCommand    *string `json:"customCommand,omitempty"`
-	CustomEntrypoint *string `json:"customEntrypoint,omitempty"`
 }
 
 type jobSettingsPayload struct {
@@ -79,21 +51,6 @@ type jobSettingsPayload struct {
 type jobCronPayload struct {
 	Schedule          string `json:"schedule"`
 	ConcurrencyPolicy string `json:"concurrencyPolicy"`
-}
-
-// dockerOverride turns separate command and entrypoint overrides into the
-// API's configType plus values. Neither set means the image defaults.
-func dockerOverride(command, entrypoint *string) *jobDockerPayload {
-	switch {
-	case command != nil && entrypoint != nil:
-		return &jobDockerPayload{ConfigType: "customEntrypointCustomCommand", CustomCommand: command, CustomEntrypoint: entrypoint}
-	case command != nil:
-		return &jobDockerPayload{ConfigType: "customCommand", CustomCommand: command}
-	case entrypoint != nil:
-		return &jobDockerPayload{ConfigType: "customEntrypoint", CustomEntrypoint: entrypoint}
-	default:
-		return &jobDockerPayload{ConfigType: "default"}
-	}
 }
 
 // jobView is the part of a job the provider reads back, in one named shape

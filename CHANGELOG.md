@@ -32,10 +32,29 @@ caveat that minor releases may still break.
   `<project_id>/<job_id>`.
 - `northflank_job` data source: looks a job up by `id` or `name` within a
   project.
+- `northflank_deployment_service` resource: a long-running service running an
+  external image or the output of a build service, with instance count,
+  command and entrypoint overrides, ports, health checks and a runtime
+  environment, all read back for drift detection. Created with
+  `POST /v1/projects/{projectId}/services/deployment` and updated with `PUT` on
+  the same path. Supports import as `<project_id>/<service_id>`.
+- `northflank_build_service` resource: builds from a Git repository with a
+  Dockerfile or buildpacks, with branch and pull request build rules, build
+  arguments and an optional build plan. Its `id` is what
+  `deployment.build_service.id` on jobs and deployment services takes.
+- `northflank_combined_service` resource: builds one branch of a Git
+  repository and runs it, with the same build settings as a build service and
+  the same ports, health checks and runtime environment as a deployment
+  service.
+- `northflank_service` data source: looks up a service of any kind by `id` or
+  `name` within a project, including its repository and branch.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with
   `NORTHFLANK_API_TOKEN` and `NORTHFLANK_ENDPOINT`.
 - API client generated with oapi-codegen from Northflank's OpenAPI document,
   vendored from `https://api.northflank.com/v1/swagger-json` and repaired by
   `internal/tools/normalizespec` first.
+- The deployment block (external image or build service, plus command and
+  entrypoint overrides) is shared by jobs and deployment services, and the
+  repository and build blocks by build and combined services.
 - Unit tests, an offline smoke plan, CI, and a GoReleaser setup for the
   Terraform Registry.

@@ -22,14 +22,14 @@ import (
 func externalImageDeployment(t *testing.T, command *string) types.Object {
 	t.Helper()
 
-	image := types.ObjectValueMust(jobExternalImageAttrTypes, map[string]attr.Value{
+	image := types.ObjectValueMust(externalImageAttrTypes, map[string]attr.Value{
 		"image_path":     types.StringValue("ghcr.io/acme/report:1.2"),
 		"credentials_id": types.StringValue("ghcr-creds"),
 	})
 
-	return types.ObjectValueMust(jobDeploymentAttrTypes, map[string]attr.Value{
+	return types.ObjectValueMust(deploymentSourceAttrTypes, map[string]attr.Value{
 		"external_image": image,
-		"build_service":  types.ObjectNull(jobBuildServiceAttrTypes),
+		"build_service":  types.ObjectNull(buildServiceAttrTypes),
 		"command":        types.StringPointerValue(command),
 		"entrypoint":     types.StringNull(),
 	})
@@ -125,9 +125,9 @@ func TestJobPayloadContents(t *testing.T) {
 		plan.Cron = types.ObjectNull(jobCronAttrTypes)
 		plan.ActiveDeadlineSeconds = types.Int64Unknown()
 		plan.RuntimeEnvironment = types.MapNull(types.StringType)
-		plan.Deployment = types.ObjectValueMust(jobDeploymentAttrTypes, map[string]attr.Value{
-			"external_image": types.ObjectNull(jobExternalImageAttrTypes),
-			"build_service": types.ObjectValueMust(jobBuildServiceAttrTypes, map[string]attr.Value{
+		plan.Deployment = types.ObjectValueMust(deploymentSourceAttrTypes, map[string]attr.Value{
+			"external_image": types.ObjectNull(externalImageAttrTypes),
+			"build_service": types.ObjectValueMust(buildServiceAttrTypes, map[string]attr.Value{
 				"id":        types.StringValue("builder"),
 				"branch":    types.StringValue("main"),
 				"build_sha": types.StringValue("latest"),
@@ -194,7 +194,7 @@ func TestDockerOverride(t *testing.T) {
 }
 
 // fakeJobGet builds a GET response carrying the given docker override.
-func fakeJobGet(t *testing.T, docker *jobDockerPayload) *northflank.GetProjectsJobsJobidHTTPResponse {
+func fakeJobGet(t *testing.T, docker *dockerPayload) *northflank.GetProjectsJobsJobidHTTPResponse {
 	t.Helper()
 
 	dockerJSON, _ := json.Marshal(docker)
@@ -231,10 +231,10 @@ func TestApplyJobKeepsUnreportedValues(t *testing.T) {
 		t.Fatal(diags)
 	}
 
-	var deployment jobDeploymentModel
+	var deployment deploymentSourceModel
 	plan.Deployment.As(ctx, &deployment, objectAsOptions)
 
-	var image jobExternalImageModel
+	var image externalImageModel
 	deployment.ExternalImage.As(ctx, &image, objectAsOptions)
 
 	if image.ImagePath.ValueString() != "ghcr.io/acme/report:1.2" {
@@ -352,12 +352,12 @@ func TestJobPatterns(t *testing.T) {
 		value string
 		want  bool
 	}{
-		{"same-project build service", jobBuildServicePattern.MatchString, "builder", true},
-		{"cross-project build service", jobBuildServicePattern.MatchString, "other-project/builder", true},
-		{"build service with two slashes", jobBuildServicePattern.MatchString, "a/b/c", false},
-		{"latest", jobBuildSHAPattern.MatchString, "latest", true},
-		{"full sha", jobBuildSHAPattern.MatchString, strings.Repeat("a1", 20), true},
-		{"short sha", jobBuildSHAPattern.MatchString, "abc123", false},
+		{"same-project build service", buildServiceIDPattern.MatchString, "builder", true},
+		{"cross-project build service", buildServiceIDPattern.MatchString, "other-project/builder", true},
+		{"build service with two slashes", buildServiceIDPattern.MatchString, "a/b/c", false},
+		{"latest", buildSHAPattern.MatchString, "latest", true},
+		{"full sha", buildSHAPattern.MatchString, strings.Repeat("a1", 20), true},
+		{"short sha", buildSHAPattern.MatchString, "abc123", false},
 		{"plan", jobPlanPattern.MatchString, "nf-compute-20", true},
 	}
 

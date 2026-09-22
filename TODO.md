@@ -8,6 +8,11 @@
 
 * Project resource (done)
 * Project datasource (done)
+* Registry resource
+* Registry datasource
+* Credentials?
+* Log sink?
+* Provider Link?
 * Tags?
 * Cloud Providers?
 * Domains?
@@ -19,8 +24,9 @@
 * Secret group datasource (done)
 * Job resource (done)
 * Job datasource (done)
-* Service resource
-* Service datasource
+* Service resource (done: deployment, build and combined services)
+* Service datasource (done)
+* Service auto-scaling
 * Addon resource
 * Addon datasource
 * Volume resource

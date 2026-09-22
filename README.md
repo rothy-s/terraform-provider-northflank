@@ -14,17 +14,21 @@ first resources and data sources on top of it. Behaviour is covered by unit
 tests, tests against a fake API server and an offline plan, but not yet by
 acceptance tests against the live API.
 
-| Resource                  | Update                                   |
-| ------------------------- | ---------------------------------------- |
-| `northflank_project`      | `description`, `color`; others replace   |
-| `northflank_secret_group` | all but `project_id` and `name`          |
-| `northflank_job`          | all but `project_id`, `name`, cron↔manual |
+| Resource                        | Update                                    |
+| ------------------------------- | ----------------------------------------- |
+| `northflank_project`            | `description`, `color`; others replace    |
+| `northflank_secret_group`       | all but `project_id` and `name`           |
+| `northflank_job`                | all but `project_id`, `name`, cron/manual |
+| `northflank_deployment_service` | all but `project_id` and `name`           |
+| `northflank_build_service`      | all but `project_id` and `name`           |
+| `northflank_combined_service`   | all but `project_id` and `name`           |
 
 | Data source               | Lookup keys                     |
 | ------------------------- | ------------------------------- |
 | `northflank_project`      | `id`, or `name`                 |
 | `northflank_secret_group` | `project_id` + (`id` or `name`) |
 | `northflank_job`          | `project_id` + (`id` or `name`) |
+| `northflank_service`      | `project_id` + (`id` or `name`) |
 
 A few things worth knowing about projects:
 
@@ -56,6 +60,34 @@ And about jobs:
 - **Switching between cron and manual replaces the job.**
 - **Jobs that build from a Git repository are not supported yet**, nor are
   health checks, GPUs or secret files.
+
+And about services:
+
+- **One resource per service kind**, since Northflank gives each its own
+  endpoints and required fields:
+  - `northflank_deployment_service` runs an external image or the output of a
+    build service.
+  - `northflank_build_service` builds from Git without running anything. Point
+    a deployment service or job at it with `deployment.build_service.id`.
+  - `northflank_combined_service` builds one branch and runs it.
+
+  The `northflank_service` data source reads any of the three.
+- **Updates use PUT** on each kind's path (`/services/deployment`,
+  `/services/build`, `/services/combined`) with the whole service, so lists
+  such as `ports` are replaced, not merged.
+- **Drift is detected everywhere**, since the API reports all of it. A
+  `build_sha` of `latest` stays `latest` rather than turning into the commit it
+  resolved to, and a Git account Northflank picked is not recorded unless one
+  was configured.
+- **Git accounts are linked in the dashboard.** Build and combined services
+  reach their repository through a Git account linked to the team, which this
+  provider does not manage.
+- **A combined service redeploys on every push** to its branch unless
+  `disable_ci` is set, independently of Terraform.
+- **Destroying a service keeps its volumes.** Volumes are not managed yet, so
+  the provider never asks Northflank to delete them.
+- **Not supported yet:** autoscaling, volumes, port security (basic auth, IP
+  policies, SSO), GPUs, secret files, path ignore rules and bundle builds.
 
 ## Usage
 

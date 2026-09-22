@@ -242,7 +242,7 @@ func (d *jobDataSource) findJobIDByName(ctx context.Context, projectID, name str
 
 func jobDataSourceModelFrom(ctx context.Context, job *jobView) (*jobDataSourceModel, diag.Diagnostics) {
 	// Reuse the resource's mapping so both report attributes the same way.
-	r := jobResourceModel{Deployment: types.ObjectNull(jobDeploymentAttrTypes)}
+	r := jobResourceModel{Deployment: types.ObjectNull(deploymentSourceAttrTypes)}
 	diags := applyJob(ctx, &r, job)
 
 	return &jobDataSourceModel{

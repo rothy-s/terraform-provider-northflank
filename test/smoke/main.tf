@@ -126,3 +126,105 @@ data "northflank_job" "by_id" {
   project_id = northflank_project.smoke.id
   id         = northflank_job.cron.id
 }
+
+resource "northflank_deployment_service" "web" {
+  project_id      = northflank_project.smoke.id
+  name            = "Smoke Web"
+  deployment_plan = "nf-compute-20"
+  instances       = 2
+
+  deployment = {
+    external_image = {
+      image_path = "nginx:latest"
+    }
+  }
+
+  ports = [
+    {
+      name          = "http"
+      internal_port = 80
+      protocol      = "HTTP"
+      public        = true
+    },
+  ]
+
+  health_checks = [
+    {
+      type                  = "livenessProbe"
+      protocol              = "TCP"
+      port                  = 80
+      initial_delay_seconds = 5
+      period_seconds        = 10
+      timeout_seconds       = 2
+      failure_threshold     = 3
+    },
+  ]
+
+  runtime_environment = {
+    SMOKE = "true"
+  }
+}
+
+resource "northflank_deployment_service" "worker" {
+  project_id      = northflank_project.smoke.id
+  name            = "Smoke Worker"
+  deployment_plan = "nf-compute-10"
+
+  deployment = {
+    build_service = {
+      id = "smoke-builder"
+    }
+    command = "node worker.js"
+  }
+}
+
+data "northflank_service" "by_id" {
+  project_id = northflank_project.smoke.id
+  id         = northflank_deployment_service.web.id
+}
+
+resource "northflank_build_service" "builder" {
+  project_id = northflank_project.smoke.id
+  name       = "Smoke Builder"
+
+  repository = {
+    url      = "https://github.com/acme/smoke"
+    provider = "github"
+  }
+
+  build = {
+    dockerfile = {
+      target = "runtime"
+    }
+  }
+
+  branch_restrictions = ["main"]
+
+  build_arguments = {
+    SMOKE = "true"
+  }
+}
+
+resource "northflank_combined_service" "web" {
+  project_id      = northflank_project.smoke.id
+  name            = "Smoke Combined"
+  deployment_plan = "nf-compute-20"
+
+  repository = {
+    url      = "https://github.com/acme/smoke"
+    provider = "github"
+  }
+  branch = "main"
+
+  build = {
+    buildpack = {}
+  }
+
+  ports = [
+    { name = "http", internal_port = 3000, protocol = "HTTP", public = true },
+  ]
+
+  runtime_environment = {
+    SMOKE = "true"
+  }
+}

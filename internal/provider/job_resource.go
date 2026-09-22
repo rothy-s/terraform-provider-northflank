@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -67,48 +66,12 @@ type jobResourceModel struct {
 	CreatedAt             types.String `tfsdk:"created_at"`
 }
 
-type jobDeploymentModel struct {
-	ExternalImage types.Object `tfsdk:"external_image"`
-	BuildService  types.Object `tfsdk:"build_service"`
-	Command       types.String `tfsdk:"command"`
-	Entrypoint    types.String `tfsdk:"entrypoint"`
-}
-
-type jobExternalImageModel struct {
-	ImagePath     types.String `tfsdk:"image_path"`
-	CredentialsID types.String `tfsdk:"credentials_id"`
-}
-
-type jobBuildServiceModel struct {
-	ID       types.String `tfsdk:"id"`
-	Branch   types.String `tfsdk:"branch"`
-	BuildSHA types.String `tfsdk:"build_sha"`
-}
-
 type jobCronModel struct {
 	Schedule          types.String `tfsdk:"schedule"`
 	ConcurrencyPolicy types.String `tfsdk:"concurrency_policy"`
 }
 
 var (
-	jobExternalImageAttrTypes = map[string]attr.Type{
-		"image_path":     types.StringType,
-		"credentials_id": types.StringType,
-	}
-
-	jobBuildServiceAttrTypes = map[string]attr.Type{
-		"id":        types.StringType,
-		"branch":    types.StringType,
-		"build_sha": types.StringType,
-	}
-
-	jobDeploymentAttrTypes = map[string]attr.Type{
-		"external_image": types.ObjectType{AttrTypes: jobExternalImageAttrTypes},
-		"build_service":  types.ObjectType{AttrTypes: jobBuildServiceAttrTypes},
-		"command":        types.StringType,
-		"entrypoint":     types.StringType,
-	}
-
 	jobCronAttrTypes = map[string]attr.Type{
 		"schedule":           types.StringType,
 		"concurrency_policy": types.StringType,
@@ -195,72 +158,9 @@ func (r *jobResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 					stringvalidator.RegexMatches(jobPlanPattern, "must be a Northflank plan ID such as nf-compute-20"),
 				},
 			},
-			"deployment": schema.SingleNestedAttribute{
-				Required: true,
-				MarkdownDescription: "What the job runs. Set exactly one of `external_image` or `build_service`.\n\n" +
-					"The API does not report the image or build service back, so a change made outside Terraform " +
-					"is not detected, and an imported job shows a difference until the next apply.",
-				Attributes: map[string]schema.Attribute{
-					"external_image": schema.SingleNestedAttribute{
-						Optional:            true,
-						MarkdownDescription: "Run an image from a container registry.",
-						Validators: []validator.Object{
-							objectvalidator.ExactlyOneOf(path.MatchRelative().AtParent().AtName("build_service")),
-						},
-						Attributes: map[string]schema.Attribute{
-							"image_path": schema.StringAttribute{
-								Required: true,
-								MarkdownDescription: "Image to run, such as `nginx:latest` or " +
-									"`ghcr.io/org/image:tag`. Images outside Docker Hub need the registry host.",
-								Validators: []validator.String{
-									stringvalidator.LengthAtLeast(1),
-								},
-							},
-							"credentials_id": schema.StringAttribute{
-								Optional:            true,
-								MarkdownDescription: "ID of saved registry credentials, for a private image.",
-							},
-						},
-					},
-					"build_service": schema.SingleNestedAttribute{
-						Optional:            true,
-						MarkdownDescription: "Run the output of a Northflank build service.",
-						Attributes: map[string]schema.Attribute{
-							"id": schema.StringAttribute{
-								Required: true,
-								MarkdownDescription: "ID of the build service: `my-builder` in the same project, or " +
-									"`other-project/my-builder` in another one.",
-								Validators: []validator.String{
-									stringvalidator.RegexMatches(jobBuildServicePattern,
-										"must be a build service ID, optionally prefixed with its project ID and a slash"),
-								},
-							},
-							"branch": schema.StringAttribute{
-								Optional:            true,
-								MarkdownDescription: "Branch whose builds to deploy.",
-							},
-							"build_sha": schema.StringAttribute{
-								Optional: true,
-								Computed: true,
-								Default:  stringdefault.StaticString("latest"),
-								MarkdownDescription: "Commit to deploy: a full 40-character SHA, or `latest` for the " +
-									"most recent build. Defaults to `latest`.",
-								Validators: []validator.String{
-									stringvalidator.RegexMatches(jobBuildSHAPattern, "must be a 40-character commit SHA or latest"),
-								},
-							},
-						},
-					},
-					"command": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Command to run instead of the image's `CMD`.",
-					},
-					"entrypoint": schema.StringAttribute{
-						Optional:            true,
-						MarkdownDescription: "Entrypoint to run instead of the image's `ENTRYPOINT`.",
-					},
-				},
-			},
+			"deployment": deploymentSourceAttribute("What the job runs. Set exactly one of `external_image` or `build_service`.\n\n" +
+				"The API does not report the image or build service back, so a change made outside Terraform " +
+				"is not detected, and an imported job shows a difference until the next apply."),
 			"cron": schema.SingleNestedAttribute{
 				Optional: true,
 				MarkdownDescription: "Run the job on a schedule. Without this block the job only runs when " +
@@ -612,39 +512,14 @@ func jobPayloadFrom(ctx context.Context, plan *jobResourceModel) (*jobPayload, d
 		diags.Append(plan.RuntimeEnvironment.ElementsAs(ctx, &payload.RuntimeEnvironment, false)...)
 	}
 
-	var deployment jobDeploymentModel
-	diags.Append(plan.Deployment.As(ctx, &deployment, objectAsOptions)...)
+	deployment, d := deploymentPayloadFrom(ctx, plan.Deployment)
+	diags.Append(d...)
 
 	if diags.HasError() {
 		return nil, diags
 	}
 
-	payload.Deployment.Docker = dockerOverride(knownStringPointer(deployment.Command), knownStringPointer(deployment.Entrypoint))
-
-	switch {
-	case !deployment.ExternalImage.IsNull() && !deployment.ExternalImage.IsUnknown():
-		var image jobExternalImageModel
-		diags.Append(deployment.ExternalImage.As(ctx, &image, objectAsOptions)...)
-
-		payload.Deployment.External = &jobExternalPayload{
-			ImagePath:   image.ImagePath.ValueString(),
-			Credentials: knownStringPointer(image.CredentialsID),
-		}
-
-	case !deployment.BuildService.IsNull() && !deployment.BuildService.IsUnknown():
-		var build jobBuildServiceModel
-		diags.Append(deployment.BuildService.As(ctx, &build, objectAsOptions)...)
-
-		payload.Deployment.Internal = &jobInternalPayload{
-			ID:       build.ID.ValueString(),
-			Branch:   knownStringPointer(build.Branch),
-			BuildSHA: knownStringPointer(build.BuildSHA),
-		}
-
-	default:
-		// Guarded by the schema's ExactlyOneOf, so this is a provider bug.
-		diags.AddError("Invalid job deployment", "Exactly one of external_image or build_service must be set.")
-	}
+	payload.Deployment = *deployment
 
 	return payload, diags
 }
@@ -710,9 +585,9 @@ func jobCronValue(cron *jobCronPayload) (types.Object, diag.Diagnostics) {
 func jobDeploymentValue(ctx context.Context, current types.Object, job *jobView) (types.Object, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	deployment := jobDeploymentModel{
-		ExternalImage: types.ObjectNull(jobExternalImageAttrTypes),
-		BuildService:  types.ObjectNull(jobBuildServiceAttrTypes),
+	deployment := deploymentSourceModel{
+		ExternalImage: types.ObjectNull(externalImageAttrTypes),
+		BuildService:  types.ObjectNull(buildServiceAttrTypes),
 	}
 
 	if !current.IsNull() && !current.IsUnknown() {
@@ -722,7 +597,7 @@ func jobDeploymentValue(ctx context.Context, current types.Object, job *jobView)
 	deployment.Command = types.StringPointerValue(job.Command)
 	deployment.Entrypoint = types.StringPointerValue(job.Entrypoint)
 
-	value, d := types.ObjectValueFrom(ctx, jobDeploymentAttrTypes, deployment)
+	value, d := types.ObjectValueFrom(ctx, deploymentSourceAttrTypes, deployment)
 	diags.Append(d...)
 
 	return value, diags

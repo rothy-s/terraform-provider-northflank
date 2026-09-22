@@ -76,7 +76,14 @@ plan_path, provider_path = sys.argv[1], sys.argv[2]
 with open(plan_path) as handle:
     plan = json.load(handle)
 
-planned = {change["type"] for change in plan.get("resource_changes", [])}
+# Deferred data source reads show up in resource_changes too; count only
+# managed resources here, or a data source could stand in for a missing
+# resource of the same name.
+planned = {
+    change["type"]
+    for change in plan.get("resource_changes", [])
+    if change.get("mode") == "managed"
+}
 
 # Data sources appear in the planned state rather than in resource_changes,
 # because their reads are deferred to apply.
@@ -129,17 +136,16 @@ for change in plan.get("resource_changes", []):
     if not (isinstance(after_sensitive, dict) and after_sensitive.get("variables")):
         sys.exit(f"smoke: {change['address']} does not mark `variables` as sensitive")
 
-# Job runtime environments must never surface in plan output either.
+# Runtime environments and build arguments must never surface in plan output
+# either, whichever resource carries them.
 for change in plan.get("resource_changes", []):
-    if change["type"] != "northflank_job":
-        continue
-    if "runtime_environment" not in (change["change"].get("after") or {}):
-        continue
+    after = change["change"].get("after") or {}
     after_sensitive = change["change"].get("after_sensitive")
-    if (change["change"]["after"] or {}).get("runtime_environment") is not None and not (
-        isinstance(after_sensitive, dict) and after_sensitive.get("runtime_environment")
-    ):
-        sys.exit(f"smoke: {change['address']} does not mark `runtime_environment` as sensitive")
+    for attribute in ("runtime_environment", "build_arguments"):
+        if after.get(attribute) is None:
+            continue
+        if not (isinstance(after_sensitive, dict) and after_sensitive.get(attribute)):
+            sys.exit(f"smoke: {change['address']} does not mark `{attribute}` as sensitive")
 
 print(
     f"smoke: OK -- planned {len(planned)} resource types "
