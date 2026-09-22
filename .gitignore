@@ -1,0 +1,16 @@
+# Built provider binary
+terraform-provider-northflank
+dist/
+
+# Terraform working files
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
+
+# Local dev overrides
+.terraformrc
+terraform.rc
+.idea

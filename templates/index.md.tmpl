@@ -1,0 +1,31 @@
+---
+page_title: "{{ .RenderedProviderName }} Provider"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{ .RenderedProviderName }} Provider
+
+Manages [Northflank](https://northflank.com) resources as code, through the
+[Northflank API](https://northflank.com/docs/v1/api/introduction).
+
+## Example Usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+## Authentication
+
+The provider authenticates with a Northflank API token. Tokens are created in
+the Northflank dashboard under team settings, API, Tokens, from an API role
+that decides what the token may do. A token belongs to a team, and every
+request acts on that team.
+
+Prefer the `NORTHFLANK_API_TOKEN` environment variable so the token stays out
+of configuration files:
+
+```shell
+export NORTHFLANK_API_TOKEN="..."
+```
+
+{{ .SchemaMarkdown | trimspace }}

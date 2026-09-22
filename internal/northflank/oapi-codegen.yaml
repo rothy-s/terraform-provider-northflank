@@ -1,0 +1,13 @@
+# Consumed by the go:generate directives in generate.go, which run with this
+# directory as the working directory -- all paths below are relative to it.
+package: northflank
+output: client.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  skip-prune: true
+  # Keeps the per-operation response wrappers distinct from any schema that
+  # happens to be named "<Something>Response", and matches the Convex
+  # provider's naming.
+  response-type-suffix: HTTPResponse

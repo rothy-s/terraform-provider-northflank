@@ -1,0 +1,80 @@
+# Release build for the Terraform Registry.
+#
+# The registry is strict about what a release looks like: one zip per platform
+# named terraform-provider-northflank_<version>_<os>_<arch>.zip, a SHA256SUMS file
+# covering them, a detached GPG signature of that file, and the registry
+# manifest. The naming and the signature are what the registry verifies, so
+# none of it is cosmetic.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      # Providers must be statically linked; the registry serves them to
+      # machines that share nothing with the build host.
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - darwin
+      - linux
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+      - arm
+    goarm:
+      - "6"
+    ignore:
+      # Combinations nobody ships and the toolchain does not support.
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+      - goos: windows
+        goarch: arm64
+    binary: '{{ .ProjectName }}_v{{ .Version }}'
+
+archives:
+  - formats: [zip]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  algorithm: sha256
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+
+signs:
+  - artifacts: checksum
+    args:
+      # GPG_FINGERPRINT selects the key; the passphrase arrives on stdin from
+      # the GitHub Actions secret.
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+release:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+  # Publish 0.x tags as normal releases rather than pre-releases, so the
+  # registry picks them up.
+  prerelease: auto
+
+changelog:
+  disable: true
