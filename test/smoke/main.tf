@@ -86,3 +86,43 @@ data "northflank_secret_group" "by_id" {
   project_id = northflank_project.smoke.id
   id         = northflank_secret_group.shared.id
 }
+
+resource "northflank_job" "cron" {
+  project_id      = northflank_project.smoke.id
+  name            = "Smoke Cron"
+  deployment_plan = "nf-compute-20"
+
+  deployment = {
+    external_image = {
+      image_path = "busybox:latest"
+    }
+    command = "echo smoke"
+  }
+
+  cron = {
+    schedule = "@daily"
+  }
+
+  runtime_environment = {
+    SMOKE = "true"
+  }
+}
+
+resource "northflank_job" "manual" {
+  project_id      = northflank_project.smoke.id
+  name            = "Smoke Manual"
+  deployment_plan = "nf-compute-10"
+
+  deployment = {
+    build_service = {
+      id = "smoke-builder"
+    }
+    entrypoint = "/bin/sh"
+    command    = "-c true"
+  }
+}
+
+data "northflank_job" "by_id" {
+  project_id = northflank_project.smoke.id
+  id         = northflank_job.cron.id
+}

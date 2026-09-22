@@ -180,6 +180,7 @@ func (p *northflankProvider) Resources(_ context.Context) []func() resource.Reso
 	return []func() resource.Resource{
 		NewProjectResource,
 		NewSecretGroupResource,
+		NewJobResource,
 	}
 }
 
@@ -187,6 +188,7 @@ func (p *northflankProvider) DataSources(_ context.Context) []func() datasource.
 	return []func() datasource.DataSource{
 		NewProjectDataSource,
 		NewSecretGroupDataSource,
+		NewJobDataSource,
 	}
 }
 

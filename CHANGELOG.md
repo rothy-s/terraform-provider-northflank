@@ -24,6 +24,14 @@ caveat that minor releases may still break.
   `<project_id>/<secret_group_id>`.
 - `northflank_secret_group` data source: looks a secret group up by `id` or
   `name` within a project, including its decrypted variables.
+- `northflank_job` resource: a cron or manual job running an external image
+  or the output of a build service, with command and entrypoint overrides,
+  retry and deadline settings, and a runtime environment. Created with
+  `POST /v1/projects/{projectId}/jobs` and updated with `PUT` on the same path,
+  which, unlike PATCH, can change the deployment source. Supports import as
+  `<project_id>/<job_id>`.
+- `northflank_job` data source: looks a job up by `id` or `name` within a
+  project.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with
   `NORTHFLANK_API_TOKEN` and `NORTHFLANK_ENDPOINT`.
 - API client generated with oapi-codegen from Northflank's OpenAPI document,

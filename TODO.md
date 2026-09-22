@@ -17,8 +17,8 @@
 
 * Secret group resource (done)
 * Secret group datasource (done)
-* Job resource
-* Job datasource
+* Job resource (done)
+* Job datasource (done)
 * Service resource
 * Service datasource
 * Addon resource

@@ -14,15 +14,17 @@ first resources and data sources on top of it. Behaviour is covered by unit
 tests, tests against a fake API server and an offline plan, but not yet by
 acceptance tests against the live API.
 
-| Resource                  | Update                                 |
-| ------------------------- | -------------------------------------- |
-| `northflank_project`      | `description`, `color`; others replace |
-| `northflank_secret_group` | all but `project_id` and `name`        |
+| Resource                  | Update                                   |
+| ------------------------- | ---------------------------------------- |
+| `northflank_project`      | `description`, `color`; others replace   |
+| `northflank_secret_group` | all but `project_id` and `name`          |
+| `northflank_job`          | all but `project_id`, `name`, cron↔manual |
 
-| Data source               | Lookup keys                      |
-| ------------------------- | -------------------------------- |
-| `northflank_project`      | `id`, or `name`                  |
-| `northflank_secret_group` | `project_id` + (`id` or `name`)  |
+| Data source               | Lookup keys                     |
+| ------------------------- | ------------------------------- |
+| `northflank_project`      | `id`, or `name`                 |
+| `northflank_secret_group` | `project_id` + (`id` or `name`) |
+| `northflank_job`          | `project_id` + (`id` or `name`) |
 
 A few things worth knowing about projects:
 
@@ -41,6 +43,19 @@ And about secret groups:
   addons are never read into state.
 - **Files and docker secret mounts are not supported yet**, nor are addon
   links.
+
+And about jobs:
+
+- **Updates go through `PUT /v1/projects/{projectId}/jobs`**, which takes the
+  whole job. PATCH cannot change what a job deploys.
+- **The deployment source and runtime environment are write-only.** The API
+  does not report which image or build service a job runs, nor its
+  environment, so changes made outside Terraform are not detected, and an
+  imported job shows a difference until the next apply. The command and
+  entrypoint overrides are reported and do show drift.
+- **Switching between cron and manual replaces the job.**
+- **Jobs that build from a Git repository are not supported yet**, nor are
+  health checks, GPUs or secret files.
 
 ## Usage
 

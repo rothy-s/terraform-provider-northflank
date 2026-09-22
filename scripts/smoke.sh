@@ -129,6 +129,18 @@ for change in plan.get("resource_changes", []):
     if not (isinstance(after_sensitive, dict) and after_sensitive.get("variables")):
         sys.exit(f"smoke: {change['address']} does not mark `variables` as sensitive")
 
+# Job runtime environments must never surface in plan output either.
+for change in plan.get("resource_changes", []):
+    if change["type"] != "northflank_job":
+        continue
+    if "runtime_environment" not in (change["change"].get("after") or {}):
+        continue
+    after_sensitive = change["change"].get("after_sensitive")
+    if (change["change"]["after"] or {}).get("runtime_environment") is not None and not (
+        isinstance(after_sensitive, dict) and after_sensitive.get("runtime_environment")
+    ):
+        sys.exit(f"smoke: {change['address']} does not mark `runtime_environment` as sensitive")
+
 print(
     f"smoke: OK -- planned {len(planned)} resource types "
     f"({', '.join(sorted(planned)) or 'none registered yet'}) and {len(read)} data sources"
