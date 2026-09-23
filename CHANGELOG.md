@@ -32,6 +32,13 @@ caveat that minor releases may still break.
   `<project_id>/<job_id>`.
 - `northflank_job` data source: looks a job up by `id` or `name` within a
   project.
+- `northflank_job` can build from Git itself, like a combined service: set
+  `repository`, `branch` and `build` (with optional `build_arguments`,
+  `build_plan` and `disable_ci`) instead of `deployment.external_image` or
+  `deployment.build_service`. The `deployment` block is now optional, and
+  only needed for command and entrypoint overrides in that case. The
+  `northflank_job` data source reports such a job's `repository_url` and
+  `branch`.
 - `northflank_deployment_service` resource: a long-running service running an
   external image or the output of a build service, with instance count,
   command and entrypoint overrides, ports, health checks and a runtime

@@ -176,8 +176,8 @@ func (r *deploymentServiceResource) Schema(_ context.Context, _ resource.SchemaR
 					int64validator.AtLeast(0),
 				},
 			},
-			"deployment": deploymentSourceAttribute("What the service runs. Set exactly one of `external_image` " +
-				"or `build_service`."),
+			"deployment": deploymentSourceAttribute("What the service runs. Set exactly one of `external_image` "+
+				"or `build_service`.", false),
 			"autoscaling": autoscalingAttribute(),
 			"ports": schema.ListNestedAttribute{
 				Optional:            true,
@@ -514,7 +514,7 @@ func deploymentServiceRequestBody(ctx context.Context, plan *deploymentServiceMo
 func deploymentServicePayloadFrom(ctx context.Context, plan *deploymentServiceModel) (*deploymentServicePayload, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	deployment, d := deploymentPayloadFrom(ctx, plan.Deployment)
+	deployment, d := deploymentPayloadFrom(ctx, plan.Deployment, true)
 	diags.Append(d...)
 
 	ports, d := portsPayload(ctx, plan.Ports)

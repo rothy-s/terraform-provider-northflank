@@ -50,6 +50,7 @@ output "nightly_schedule" {
 - `active_deadline_seconds` (Number) Longest a run may take, in seconds. Null when Northflank's own limit applies.
 - `app_id` (String) Full identifier Northflank uses for the job's deployment.
 - `backoff_limit` (Number) Number of times a failed run is retried.
+- `branch` (String) Branch the job builds from, for a job that builds itself.
 - `command` (String) Command override. Null when the image's `CMD` is used.
 - `created_at` (String) Creation time, in RFC 3339 format.
 - `cron` (Attributes) The job's schedule. Null for a manual job. (see [below for nested schema](#nestedatt--cron))
@@ -57,6 +58,7 @@ output "nightly_schedule" {
 - `description` (String) Short description of the job.
 - `entrypoint` (String) Entrypoint override. Null when the image's `ENTRYPOINT` is used.
 - `job_type` (String) `cron` or `manual`.
+- `repository_url` (String) Git repository the job builds from, for a job that builds itself. Null for a job running an image or a build service's output.
 - `suspended` (Boolean) Whether a cron job's schedule is currently suspended.
 - `tags` (Set of String) Tags attached to the job.
 - `uid` (String) Permanent identifier of the job. Unlike `id`, it never changes and is never reused.

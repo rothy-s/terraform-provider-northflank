@@ -44,3 +44,37 @@ resource "northflank_job" "migrate" {
     command = "npm run migrate"
   }
 }
+
+# A cron job that builds itself from Git, like a combined service: no image
+# or build service, just the repository, a branch and how to build it.
+resource "northflank_job" "cleanup" {
+  project_id      = northflank_project.app.id
+  name            = "Nightly Cleanup"
+  deployment_plan = "nf-compute-10"
+
+  repository = {
+    url      = "https://github.com/acme/tools"
+    provider = "github"
+  }
+  branch = "main"
+
+  build = {
+    dockerfile = {
+      path   = "/jobs/cleanup/Dockerfile"
+      target = "runtime"
+    }
+  }
+
+  build_arguments = {
+    NODE_ENV = "production"
+  }
+
+  # Only needed for a command or entrypoint override.
+  deployment = {
+    command = "node cleanup.js"
+  }
+
+  cron = {
+    schedule = "0 3 * * *"
+  }
+}

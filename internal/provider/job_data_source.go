@@ -49,6 +49,8 @@ type jobDataSourceModel struct {
 	ActiveDeadlineSeconds types.Int64  `tfsdk:"active_deadline_seconds"`
 	Command               types.String `tfsdk:"command"`
 	Entrypoint            types.String `tfsdk:"entrypoint"`
+	RepositoryURL         types.String `tfsdk:"repository_url"`
+	Branch                types.String `tfsdk:"branch"`
 	Suspended             types.Bool   `tfsdk:"suspended"`
 	CreatedAt             types.String `tfsdk:"created_at"`
 }
@@ -111,6 +113,9 @@ func (d *jobDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, re
 			},
 			"command":    computedString("Command override. Null when the image's `CMD` is used."),
 			"entrypoint": computedString("Entrypoint override. Null when the image's `ENTRYPOINT` is used."),
+			"repository_url": computedString("Git repository the job builds from, for a job that builds " +
+				"itself. Null for a job running an image or a build service's output."),
+			"branch": computedString("Branch the job builds from, for a job that builds itself."),
 			"suspended": schema.BoolAttribute{
 				Computed:            true,
 				MarkdownDescription: "Whether a cron job's schedule is currently suspended.",
@@ -245,7 +250,7 @@ func jobDataSourceModelFrom(ctx context.Context, job *jobView) (*jobDataSourceMo
 	r := jobResourceModel{Deployment: types.ObjectNull(deploymentSourceAttrTypes)}
 	diags := applyJob(ctx, &r, job)
 
-	return &jobDataSourceModel{
+	model := &jobDataSourceModel{
 		ID:                    r.ID,
 		ProjectID:             r.ProjectID,
 		Name:                  r.Name,
@@ -260,7 +265,16 @@ func jobDataSourceModelFrom(ctx context.Context, job *jobView) (*jobDataSourceMo
 		ActiveDeadlineSeconds: r.ActiveDeadlineSeconds,
 		Command:               types.StringPointerValue(job.Command),
 		Entrypoint:            types.StringPointerValue(job.Entrypoint),
+		RepositoryURL:         types.StringNull(),
+		Branch:                types.StringNull(),
 		Suspended:             r.Suspended,
 		CreatedAt:             r.CreatedAt,
-	}, diags
+	}
+
+	if b := job.Build; b != nil && b.VcsData != nil {
+		model.RepositoryURL = types.StringValue(b.VcsData.ProjectURL)
+		model.Branch = types.StringPointerValue(b.VcsData.ProjectBranch)
+	}
+
+	return model, diags
 }

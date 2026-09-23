@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -36,10 +37,20 @@ type jobPayload struct {
 	Deployment         deploymentPayload  `json:"deployment"`
 	Settings           jobSettingsPayload `json:"settings"`
 	RuntimeEnvironment map[string]string  `json:"runtimeEnvironment"`
+
+	// Only for a job that builds from Git; the repository itself goes in
+	// deployment.vcs.
+	BuildSettings      *buildSettingsPayload      `json:"buildSettings,omitempty"`
+	BuildConfiguration *buildConfigurationPayload `json:"buildConfiguration,omitempty"`
+	BuildArguments     map[string]string          `json:"buildArguments,omitempty"`
+	DisabledCI         *bool                      `json:"disabledCI,omitempty"`
 }
 
+// jobBillingPayload is shared with deployment services, which never set a
+// build plan.
 type jobBillingPayload struct {
-	DeploymentPlan string `json:"deploymentPlan"`
+	DeploymentPlan string  `json:"deploymentPlan"`
+	BuildPlan      *string `json:"buildPlan,omitempty"`
 }
 
 type jobSettingsPayload struct {
@@ -57,7 +68,9 @@ type jobCronPayload struct {
 // for the resource, the data source and the tests.
 //
 // The API does not report which image or build service a job deploys, nor its
-// runtime environment, so those are absent here.
+// runtime environment, so those are absent here. It does report the
+// repository and build settings of a job that builds from Git, which Build
+// carries in the shape services use.
 type jobView struct {
 	ID                    string
 	UID                   string
@@ -74,7 +87,11 @@ type jobView struct {
 	Command               *string
 	Entrypoint            *string
 	Suspended             bool
+	DisabledCI            bool
 	CreatedAt             time.Time
+
+	// Build is set for a job that builds from Git.
+	Build *serviceRead
 }
 
 // getJob fetches a job, retrying transient failures.
@@ -93,10 +110,31 @@ func getJob(ctx context.Context, client *northflank.ClientWithResponses, project
 		}
 
 		view, err = jobFromGet(got)
-		return err
+
+		if err != nil {
+			return err
+		}
+
+		view.Build = jobBuildFromBody(got.Body)
+		return nil
 	})
 
 	return view, err
+}
+
+// jobBuildFromBody reads the repository and build settings of a job that
+// builds from Git, or nil for one that does not. The build settings are a
+// union in the generated types, so the body is read the way services are.
+func jobBuildFromBody(body []byte) *serviceRead {
+	var build struct {
+		Data serviceRead `json:"data"`
+	}
+
+	if json.Unmarshal(body, &build) != nil || build.Data.VcsData == nil {
+		return nil
+	}
+
+	return &build.Data
 }
 
 func jobFromGet(got *northflank.GetProjectsJobsJobidHTTPResponse) (*jobView, error) {
@@ -119,6 +157,7 @@ func jobFromGet(got *northflank.GetProjectsJobsJobidHTTPResponse) (*jobView, err
 		BackoffLimit:          data.Settings.BackoffLimit,
 		ActiveDeadlineSeconds: data.Settings.ActiveDeadlineSeconds,
 		Suspended:             data.Suspended != nil && *data.Suspended,
+		DisabledCI:            data.DisabledCI,
 		CreatedAt:             data.CreatedAt,
 	}
 

@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -15,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
@@ -32,9 +35,10 @@ import (
 
 // Ensure the implementation satisfies the framework interfaces.
 var (
-	_ resource.Resource                = (*jobResource)(nil)
-	_ resource.ResourceWithConfigure   = (*jobResource)(nil)
-	_ resource.ResourceWithImportState = (*jobResource)(nil)
+	_ resource.Resource                     = (*jobResource)(nil)
+	_ resource.ResourceWithConfigure        = (*jobResource)(nil)
+	_ resource.ResourceWithImportState      = (*jobResource)(nil)
+	_ resource.ResourceWithConfigValidators = (*jobResource)(nil)
 )
 
 type jobResource struct {
@@ -61,6 +65,12 @@ type jobResourceModel struct {
 	BackoffLimit          types.Int64  `tfsdk:"backoff_limit"`
 	ActiveDeadlineSeconds types.Int64  `tfsdk:"active_deadline_seconds"`
 	RuntimeEnvironment    types.Map    `tfsdk:"runtime_environment"`
+	Repository            types.Object `tfsdk:"repository"`
+	Branch                types.String `tfsdk:"branch"`
+	Build                 types.Object `tfsdk:"build"`
+	BuildArguments        types.Map    `tfsdk:"build_arguments"`
+	BuildPlan             types.String `tfsdk:"build_plan"`
+	DisableCI             types.Bool   `tfsdk:"disable_ci"`
 	JobType               types.String `tfsdk:"job_type"`
 	Suspended             types.Bool   `tfsdk:"suspended"`
 	CreatedAt             types.String `tfsdk:"created_at"`
@@ -158,9 +168,34 @@ func (r *jobResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 					stringvalidator.RegexMatches(jobPlanPattern, "must be a Northflank plan ID such as nf-compute-20"),
 				},
 			},
-			"deployment": deploymentSourceAttribute("What the job runs. Set exactly one of `external_image` or `build_service`.\n\n" +
-				"The API does not report the image or build service back, so a change made outside Terraform " +
-				"is not detected, and an imported job shows a difference until the next apply."),
+			"deployment": deploymentSourceAttribute("What the job runs: an `external_image` or the output of a "+
+				"`build_service`. For a job that builds from Git itself, set `repository` instead and use this "+
+				"block only for `command` and `entrypoint`, or leave it out.\n\n"+
+				"The API does not report the image or build service back, so a change made outside Terraform "+
+				"is not detected, and an imported job shows a difference until the next apply.", true),
+			"repository": jobBuildAttribute(repositoryAttribute(), "Build the job from this Git repository, "+
+				"like a combined service, instead of running an image or a build service's output. Requires "+
+				"`branch` and `build`."),
+			"branch": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Branch of `repository` to build and run.",
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+					stringvalidator.RegexMatches(branchRulePattern, "must be a valid branch name"),
+					stringvalidator.AlsoRequires(path.MatchRoot("repository")),
+				},
+			},
+			"build": jobBuildAttribute(buildSettingsAttribute(), "How to build `repository`. Set exactly one "+
+				"of `dockerfile` or `buildpack`."),
+			"build_arguments": withAlsoRequiresMap(buildArgumentsAttribute(), path.MatchRoot("repository")),
+			"build_plan":      withAlsoRequiresString(buildPlanAttribute(), path.MatchRoot("repository")),
+			"disable_ci": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+				MarkdownDescription: "For a job that builds from Git: stop building new commits automatically. " +
+					"Defaults to `false`.",
+			},
 			"cron": schema.SingleNestedAttribute{
 				Optional: true,
 				MarkdownDescription: "Run the job on a schedule. Without this block the job only runs when " +
@@ -247,6 +282,43 @@ func (r *jobResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 	}
 }
 
+// ConfigValidators require exactly one source across the deployment block and
+// the repository, which the schema alone cannot express.
+func (r *jobResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.ExactlyOneOf(
+			path.MatchRoot("deployment").AtName("external_image"),
+			path.MatchRoot("deployment").AtName("build_service"),
+			path.MatchRoot("repository"),
+		),
+		resourcevalidator.RequiredTogether(
+			path.MatchRoot("repository"),
+			path.MatchRoot("branch"),
+			path.MatchRoot("build"),
+		),
+	}
+}
+
+// jobBuildAttribute turns one of the build service's required blocks into an
+// optional one with its own description.
+func jobBuildAttribute(attribute schema.SingleNestedAttribute, description string) schema.SingleNestedAttribute {
+	attribute.Required = false
+	attribute.Optional = true
+	attribute.MarkdownDescription = description
+
+	return attribute
+}
+
+func withAlsoRequiresMap(attribute schema.MapAttribute, expression path.Expression) schema.MapAttribute {
+	attribute.Validators = append(attribute.Validators, mapvalidator.AlsoRequires(expression))
+	return attribute
+}
+
+func withAlsoRequiresString(attribute schema.StringAttribute, expression path.Expression) schema.StringAttribute {
+	attribute.Validators = append(attribute.Validators, stringvalidator.AlsoRequires(expression))
+	return attribute
+}
+
 func (r *jobResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	data, ok := providerDataFrom(req.ProviderData, &resp.Diagnostics)
 
@@ -314,6 +386,10 @@ func (r *jobResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 	if plan.ActiveDeadlineSeconds.IsUnknown() {
 		plan.ActiveDeadlineSeconds = types.Int64Null()
+	}
+
+	if plan.BuildPlan.IsUnknown() {
+		plan.BuildPlan = types.StringNull()
 	}
 
 	job, err := getJob(ctx, r.client, projectID, jobID)
@@ -512,7 +588,7 @@ func jobPayloadFrom(ctx context.Context, plan *jobResourceModel) (*jobPayload, d
 		diags.Append(plan.RuntimeEnvironment.ElementsAs(ctx, &payload.RuntimeEnvironment, false)...)
 	}
 
-	deployment, d := deploymentPayloadFrom(ctx, plan.Deployment)
+	deployment, d := deploymentPayloadFrom(ctx, plan.Deployment, false)
 	diags.Append(d...)
 
 	if diags.HasError() {
@@ -520,6 +596,31 @@ func jobPayloadFrom(ctx context.Context, plan *jobResourceModel) (*jobPayload, d
 	}
 
 	payload.Deployment = *deployment
+
+	// A job that builds from Git names its repository in deployment.vcs and
+	// carries its build settings next to it.
+	if !plan.Repository.IsNull() && !plan.Repository.IsUnknown() {
+		vcs, d := vcsDataPayloadFrom(ctx, plan.Repository, plan.Branch.ValueStringPointer())
+		diags.Append(d...)
+
+		settings, target, d := buildSettingsPayloadFrom(ctx, plan.Build)
+		diags.Append(d...)
+
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		payload.Deployment.VCS = vcs
+		payload.BuildSettings = settings
+		payload.BuildConfiguration = &buildConfigurationPayload{DockerfileTarget: target}
+		payload.Billing.BuildPlan = knownStringPointer(plan.BuildPlan)
+		payload.DisabledCI = plan.DisableCI.ValueBoolPointer()
+		payload.BuildArguments = map[string]string{}
+
+		if !plan.BuildArguments.IsNull() && !plan.BuildArguments.IsUnknown() {
+			diags.Append(plan.BuildArguments.ElementsAs(ctx, &payload.BuildArguments, false)...)
+		}
+	}
 
 	return payload, diags
 }
@@ -565,6 +666,46 @@ func applyJob(ctx context.Context, model *jobResourceModel, job *jobView) diag.D
 		model.RuntimeEnvironment = types.MapNull(types.StringType)
 	}
 
+	diags.Append(applyJobBuild(ctx, model, job)...)
+
+	return diags
+}
+
+// applyJobBuild copies the repository and build settings of a job that builds
+// from Git. The API reports those, but not the build arguments or build plan,
+// which keep the model's values.
+func applyJobBuild(ctx context.Context, model *jobResourceModel, job *jobView) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	model.DisableCI = types.BoolValue(job.DisabledCI)
+
+	for _, v := range []*types.String{&model.BuildPlan, &model.Branch} {
+		if v.IsUnknown() {
+			*v = types.StringNull()
+		}
+	}
+
+	if model.BuildArguments.IsUnknown() {
+		model.BuildArguments = types.MapNull(types.StringType)
+	}
+
+	if job.Build == nil {
+		model.Repository = types.ObjectNull(repositoryAttrTypes)
+		model.Build = types.ObjectNull(buildSettingsAttrTypes)
+		model.Branch = types.StringNull()
+
+		return diags
+	}
+
+	repository, d := repositoryValue(ctx, model.Repository, job.Build)
+	diags.Append(d...)
+	model.Repository = repository
+	model.Branch = types.StringPointerValue(job.Build.VcsData.ProjectBranch)
+
+	build, d := buildSettingsValue(ctx, job.Build)
+	diags.Append(d...)
+	model.Build = build
+
 	return diags
 }
 
@@ -592,6 +733,10 @@ func jobDeploymentValue(ctx context.Context, current types.Object, job *jobView)
 
 	if !current.IsNull() && !current.IsUnknown() {
 		diags.Append(current.As(ctx, &deployment, objectAsOptions)...)
+	} else if job.Command == nil && job.Entrypoint == nil {
+		// Left out, as it may be for a job that builds from Git, and nothing
+		// to report: keep it out.
+		return types.ObjectNull(deploymentSourceAttrTypes), diags
 	}
 
 	deployment.Command = types.StringPointerValue(job.Command)

@@ -69,8 +69,13 @@ And about jobs:
   imported job shows a difference until the next apply. The command and
   entrypoint overrides are reported and do show drift.
 - **Switching between cron and manual replaces the job.**
-- **Jobs that build from a Git repository are not supported yet**, nor are
-  health checks, GPUs or secret files.
+- **Three ways to get what a job runs:** `deployment.external_image`,
+  `deployment.build_service` (the output of a `northflank_build_service`), or
+  `repository` with `branch` and `build`, in which case the job builds itself
+  from Git like a combined service. Exactly one is checked at plan time. A
+  Git-built job's repository and build settings are read back; its build
+  arguments and build plan are not.
+- **Not supported yet:** health checks, GPUs and secret files.
 
 And about services:
 

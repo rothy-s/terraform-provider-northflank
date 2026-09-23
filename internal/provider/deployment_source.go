@@ -16,7 +16,9 @@ import (
 )
 
 // The deployment block -- what a workload runs -- is shared by jobs and
-// deployment services, which describe it with the same API shape.
+// deployment services, which describe it with the same API shape. A job can
+// also build from Git itself, in which case the source is its repository and
+// the block only carries the command and entrypoint overrides.
 
 var (
 	// A build service in this project ("my-builder"), or in another one
@@ -66,6 +68,7 @@ var (
 type deploymentPayload struct {
 	External *externalImagePayload `json:"external,omitempty"`
 	Internal *buildServicePayload  `json:"internal,omitempty"`
+	VCS      *vcsDataPayload       `json:"vcs,omitempty"`
 	Docker   *dockerPayload        `json:"docker,omitempty"`
 }
 
@@ -102,10 +105,20 @@ func dockerOverride(command, entrypoint *string) *dockerPayload {
 }
 
 // deploymentPayloadFrom converts a configured deployment block into the
-// API's shape: exactly one source, plus the docker override.
-func deploymentPayloadFrom(ctx context.Context, value types.Object) (*deploymentPayload, diag.Diagnostics) {
+// API's shape: a source, plus the docker override. With requireSource unset,
+// the block may be absent or name no source, as for a job that builds from
+// Git, whose caller adds the source itself.
+func deploymentPayloadFrom(ctx context.Context, value types.Object, requireSource bool) (*deploymentPayload, diag.Diagnostics) {
 	var diags diag.Diagnostics
-	payload := &deploymentPayload{}
+	payload := &deploymentPayload{Docker: dockerOverride(nil, nil)}
+
+	if value.IsNull() || value.IsUnknown() {
+		if requireSource {
+			diags.AddError("Missing deployment", "The deployment block must be set.")
+		}
+
+		return payload, diags
+	}
 
 	var deployment deploymentSourceModel
 	diags.Append(value.As(ctx, &deployment, objectAsOptions)...)
@@ -136,9 +149,9 @@ func deploymentPayloadFrom(ctx context.Context, value types.Object) (*deployment
 			BuildSHA: knownStringPointer(build.BuildSHA),
 		}
 
-	default:
+	case requireSource:
 		// Guarded by the schema's ExactlyOneOf, so this is a provider bug.
-		diags.AddError("Invalid job deployment", "Exactly one of external_image or build_service must be set.")
+		diags.AddError("Invalid deployment", "Exactly one of external_image or build_service must be set.")
 	}
 
 	return payload, diags
@@ -146,17 +159,26 @@ func deploymentPayloadFrom(ctx context.Context, value types.Object) (*deployment
 
 // deploymentSourceAttribute is the schema of the deployment block. The
 // description differs between resources, since they report the source back
-// differently.
-func deploymentSourceAttribute(description string) schema.SingleNestedAttribute {
+// differently. With sourceOptional, the block itself and its source are
+// optional, for a resource that can name its source elsewhere; that resource
+// then checks that exactly one source is set.
+func deploymentSourceAttribute(description string, sourceOptional bool) schema.SingleNestedAttribute {
+	sourceRule := objectvalidator.ExactlyOneOf(path.MatchRelative().AtParent().AtName("build_service"))
+
+	if sourceOptional {
+		sourceRule = objectvalidator.ConflictsWith(path.MatchRelative().AtParent().AtName("build_service"))
+	}
+
 	return schema.SingleNestedAttribute{
-		Required:            true,
+		Required:            !sourceOptional,
+		Optional:            sourceOptional,
 		MarkdownDescription: description,
 		Attributes: map[string]schema.Attribute{
 			"external_image": schema.SingleNestedAttribute{
 				Optional:            true,
 				MarkdownDescription: "Run an image from a container registry.",
 				Validators: []validator.Object{
-					objectvalidator.ExactlyOneOf(path.MatchRelative().AtParent().AtName("build_service")),
+					sourceRule,
 				},
 				Attributes: map[string]schema.Attribute{
 					"image_path": schema.StringAttribute{
