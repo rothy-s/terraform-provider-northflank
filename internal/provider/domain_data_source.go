@@ -59,7 +59,7 @@ func (d *domainDataSource) Schema(_ context.Context, _ datasource.SchemaRequest,
 				MarkdownDescription: "Root domain, such as `example.com`.",
 			},
 			"status":                    computedString("`pending` or `verified`."),
-			"verification_record_name":  computedString("Name of the TXT record that proves ownership."),
+			"verification_record_name":  computedString("Full DNS name of the TXT record that proves ownership."),
 			"verification_record_value": computedString("Value of the TXT record that proves ownership."),
 			"subdomains": schema.ListNestedAttribute{
 				Computed:            true,
@@ -122,7 +122,7 @@ func (d *domainDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &domainDataSourceModel{
 		Domain:                  types.StringValue(read.Name),
 		Status:                  types.StringValue(read.Status),
-		VerificationRecordName:  types.StringPointerValue(read.Hostname),
+		VerificationRecordName:  types.StringPointerValue(verificationRecordName(read.Hostname, read.Name)),
 		VerificationRecordValue: types.StringPointerValue(read.Token),
 		Subdomains:              list,
 	})...)

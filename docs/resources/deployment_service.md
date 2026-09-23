@@ -204,7 +204,7 @@ Optional:
 - `cmd` (String) Command to run inside the container.
 - `path` (String) HTTP path to request, such as `/healthz`.
 - `port` (Number) Port to check.
-- `success_threshold` (Number) Successful checks in a row before the instance counts as healthy. Defaults to `1`.
+- `success_threshold` (Number) Successful checks in a row before the instance counts as ready, 1 to 255. Only for a `readinessProbe`: Northflank rejects it on other probe types.
 
 
 <a id="nestedatt--ports"></a>
@@ -218,6 +218,7 @@ Required:
 
 Optional:
 
+- `disable_nf_domain` (Boolean) Stop routing the port's default `code.run` domain, so that it is reachable only through `domains`. For public HTTP ports with custom domains. Defaults to `false`.
 - `domains` (Set of String) Custom domains routed to this port. Each must already be verified in Northflank.
 - `public` (Boolean) Whether the port is exposed to the internet. Defaults to `false`.
 

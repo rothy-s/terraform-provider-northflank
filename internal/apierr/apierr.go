@@ -22,17 +22,28 @@ type APIError struct {
 	// carries one. Worth quoting in a support request.
 	ID string
 
+	// Details is whatever else the error carries, such as the field-level
+	// reasons behind "Request failed payload validation - see details", as
+	// compact JSON. The format is undocumented, so it is passed on as is.
+	Details string
+
 	// Body is the raw response body, always populated.
 	Body []byte
 }
 
 func (e *APIError) Error() string {
+	details := ""
+
+	if e.Details != "" {
+		details = "\nDetails: " + truncate(e.Details, 2048)
+	}
+
 	switch {
 	case e.Message != "" && e.ID != "":
-		return fmt.Sprintf("HTTP %d: %s (request %s)", e.StatusCode, e.Message, e.ID)
+		return fmt.Sprintf("HTTP %d: %s (request %s)%s", e.StatusCode, e.Message, e.ID, details)
 
 	case e.Message != "":
-		return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Message)
+		return fmt.Sprintf("HTTP %d: %s%s", e.StatusCode, e.Message, details)
 
 	case len(e.Body) > 0:
 		return fmt.Sprintf("HTTP %d: %s", e.StatusCode, truncate(strings.TrimSpace(string(e.Body)), 512))
@@ -67,23 +78,44 @@ func Check(resp Response) error {
 	apiErr := &APIError{StatusCode: status, Body: body}
 
 	// Northflank reports errors as {"error": {"status": ..., "message": "...",
-	// "id": "..."}}. The OpenAPI document does not describe error bodies, so
-	// a top-level "message" is accepted too, and anything that does not parse
-	// falls back to the raw body in Error().
+	// "id": "...", ...}}. The OpenAPI document does not describe error bodies,
+	// so a top-level "message" is accepted too, anything else in the error is
+	// kept as details, and a body that does not parse falls back to the raw
+	// body in Error().
 	var parsed struct {
-		Error struct {
-			Message string `json:"message"`
-			ID      string `json:"id"`
-		} `json:"error"`
-		Message string `json:"message"`
+		Error   map[string]json.RawMessage `json:"error"`
+		Message string                     `json:"message"`
+		Details json.RawMessage            `json:"details"`
 	}
 
 	if err := json.Unmarshal(body, &parsed); err == nil {
-		apiErr.Message = parsed.Error.Message
-		apiErr.ID = parsed.Error.ID
+		rest := map[string]json.RawMessage{}
+
+		for key, value := range parsed.Error {
+			switch key {
+			case "message":
+				_ = json.Unmarshal(value, &apiErr.Message)
+			case "id":
+				_ = json.Unmarshal(value, &apiErr.ID)
+			case "status":
+				// Already known from the response.
+			default:
+				rest[key] = value
+			}
+		}
 
 		if apiErr.Message == "" {
 			apiErr.Message = parsed.Message
+		}
+
+		if len(parsed.Details) > 0 && string(parsed.Details) != "null" {
+			rest["details"] = parsed.Details
+		}
+
+		if len(rest) > 0 {
+			if encoded, err := json.Marshal(rest); err == nil {
+				apiErr.Details = string(encoded)
+			}
 		}
 	}
 

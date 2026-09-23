@@ -514,11 +514,11 @@ func applyCombinedService(ctx context.Context, model *combinedServiceModel, serv
 	diags.Append(d...)
 	model.Tags = tags
 
-	ports, d := portsValue(ctx, service.Ports)
+	ports, d := portsValue(ctx, service.Ports, model.Ports)
 	diags.Append(d...)
 	model.Ports = ports
 
-	healthChecks, d := healthChecksValue(ctx, service.HealthChecks)
+	healthChecks, d := healthChecksValue(ctx, service.HealthChecks, model.HealthChecks)
 	diags.Append(d...)
 	model.HealthChecks = healthChecks
 

@@ -94,7 +94,7 @@ variable "cloudflare_zone_id" {
 
 - `id` (String) The domain name, which is also its identifier.
 - `status` (String) `pending` until the domain is verified, then `verified`.
-- `verification_record_name` (String) Name of the TXT record to create to prove ownership.
+- `verification_record_name` (String) Full DNS name of the TXT record to create to prove ownership, such as `verify-abc123.example.com`. With a DNS provider that takes names relative to the zone, strip the zone from it.
 - `verification_record_value` (String) Value of the TXT record to create to prove ownership.
 
 ## Import

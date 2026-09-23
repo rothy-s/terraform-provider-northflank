@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/srs/terraform-provider-northflank/internal/apierr"
@@ -112,13 +113,15 @@ type serviceRead struct {
 }
 
 // servicePortPayload is one port, in the shape the API both takes and
-// reports.
+// reports. DisableNfDomain is a pointer so that a response leaving it out can
+// be told apart from false.
 type servicePortPayload struct {
-	Name         string   `json:"name"`
-	InternalPort int      `json:"internalPort"`
-	Protocol     string   `json:"protocol"`
-	Public       bool     `json:"public"`
-	Domains      []string `json:"domains"`
+	Name            string   `json:"name"`
+	InternalPort    int      `json:"internalPort"`
+	Protocol        string   `json:"protocol"`
+	Public          bool     `json:"public"`
+	Domains         []string `json:"domains"`
+	DisableNfDomain *bool    `json:"disableNfDomain,omitempty"`
 }
 
 // serviceHealthCheckPayload is one health check, in the shape the API both
@@ -209,6 +212,8 @@ var (
 		"protocol":      types.StringType,
 		"public":        types.BoolType,
 		"domains":       types.SetType{ElemType: types.StringType},
+
+		"disable_nf_domain": types.BoolType,
 	}
 
 	serviceHealthCheckAttrTypes = map[string]attr.Type{
@@ -231,6 +236,8 @@ type servicePortModel struct {
 	Protocol     types.String `tfsdk:"protocol"`
 	Public       types.Bool   `tfsdk:"public"`
 	Domains      types.Set    `tfsdk:"domains"`
+
+	DisableNfDomain types.Bool `tfsdk:"disable_nf_domain"`
 }
 
 type serviceHealthCheckModel struct {
@@ -247,19 +254,35 @@ type serviceHealthCheckModel struct {
 }
 
 // portsValue converts reported ports into Terraform's list. No ports is an
-// empty list, matching the schema default.
-func portsValue(ctx context.Context, ports []servicePortPayload) (types.List, diag.Diagnostics) {
+// empty list, matching the schema default. Where Northflank leaves out
+// disableNfDomain, the prior port's value is kept, or false without one.
+func portsValue(ctx context.Context, ports []servicePortPayload, prior types.List) (types.List, diag.Diagnostics) {
 	var diags diag.Diagnostics
+	var priorPorts []servicePortModel
+
+	if !prior.IsNull() && !prior.IsUnknown() {
+		diags.Append(prior.ElementsAs(ctx, &priorPorts, false)...)
+	}
 
 	models := make([]servicePortModel, 0, len(ports))
 
-	for _, p := range ports {
+	for i, p := range ports {
+		disableNfDomain := types.BoolValue(false)
+
+		switch {
+		case p.DisableNfDomain != nil:
+			disableNfDomain = types.BoolValue(*p.DisableNfDomain)
+		case i < len(priorPorts) && !priorPorts[i].DisableNfDomain.IsNull() && !priorPorts[i].DisableNfDomain.IsUnknown():
+			disableNfDomain = priorPorts[i].DisableNfDomain
+		}
+
 		models = append(models, servicePortModel{
-			Name:         types.StringValue(p.Name),
-			InternalPort: types.Int64Value(int64(p.InternalPort)),
-			Protocol:     types.StringValue(p.Protocol),
-			Public:       types.BoolValue(p.Public),
-			Domains:      setOrEmpty(ctx, p.Domains, &diags),
+			Name:            types.StringValue(p.Name),
+			InternalPort:    types.Int64Value(int64(p.InternalPort)),
+			Protocol:        types.StringValue(p.Protocol),
+			Public:          types.BoolValue(p.Public),
+			Domains:         setOrEmpty(ctx, p.Domains, &diags),
+			DisableNfDomain: disableNfDomain,
 		})
 	}
 
@@ -286,16 +309,35 @@ func portsPayload(ctx context.Context, value types.List) ([]servicePortPayload, 
 			Protocol:     m.Protocol.ValueString(),
 			Public:       m.Public.ValueBool(),
 			Domains:      stringsFromSet(ctx, m.Domains, &diags),
+
+			DisableNfDomain: m.DisableNfDomain.ValueBoolPointer(),
 		})
 	}
 
 	return out, diags
 }
 
-func healthChecksValue(ctx context.Context, checks []serviceHealthCheckPayload) (types.List, diag.Diagnostics) {
+// healthChecksValue converts reported health checks into Terraform's list.
+// A success threshold the prior list leaves unset stays unset: Northflank may
+// report its own default for readiness probes, and recording it would make
+// the apply come back inconsistent.
+func healthChecksValue(ctx context.Context, checks []serviceHealthCheckPayload, prior types.List) (types.List, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var priorChecks []serviceHealthCheckModel
+
+	if !prior.IsNull() && !prior.IsUnknown() {
+		diags.Append(prior.ElementsAs(ctx, &priorChecks, false)...)
+	}
+
 	models := make([]serviceHealthCheckModel, 0, len(checks))
 
-	for _, c := range checks {
+	for i, c := range checks {
+		successThreshold := int64PointerValue(c.SuccessThreshold)
+
+		if i < len(priorChecks) && priorChecks[i].SuccessThreshold.IsNull() {
+			successThreshold = types.Int64Null()
+		}
+
 		models = append(models, serviceHealthCheckModel{
 			Type:                types.StringValue(c.Type),
 			Protocol:            types.StringValue(c.Protocol),
@@ -306,11 +348,49 @@ func healthChecksValue(ctx context.Context, checks []serviceHealthCheckPayload) 
 			PeriodSeconds:       types.Int64Value(int64(c.PeriodSeconds)),
 			TimeoutSeconds:      types.Int64Value(int64(c.TimeoutSeconds)),
 			FailureThreshold:    types.Int64Value(int64(c.FailureThreshold)),
-			SuccessThreshold:    int64PointerValue(c.SuccessThreshold),
+			SuccessThreshold:    successThreshold,
 		})
 	}
 
-	return types.ListValueFrom(ctx, types.ObjectType{AttrTypes: serviceHealthCheckAttrTypes}, models)
+	list, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: serviceHealthCheckAttrTypes}, models)
+	diags.Append(d...)
+
+	return list, diags
+}
+
+// healthCheckSuccessThresholdValidator rejects success_threshold on anything
+// but a readiness probe at plan time, which Northflank otherwise rejects
+// halfway through an apply.
+type healthCheckSuccessThresholdValidator struct{}
+
+func (healthCheckSuccessThresholdValidator) Description(context.Context) string {
+	return "success_threshold is only allowed on a readinessProbe"
+}
+
+func (v healthCheckSuccessThresholdValidator) MarkdownDescription(ctx context.Context) string {
+	return "`success_threshold` is only allowed on a `readinessProbe`"
+}
+
+func (healthCheckSuccessThresholdValidator) ValidateObject(ctx context.Context, req validator.ObjectRequest, resp *validator.ObjectResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	attrs := req.ConfigValue.Attributes()
+	threshold, _ := attrs["success_threshold"].(types.Int64)
+	checkType, _ := attrs["type"].(types.String)
+
+	if threshold.IsNull() || threshold.IsUnknown() || checkType.IsUnknown() {
+		return
+	}
+
+	if checkType.ValueString() != "readinessProbe" {
+		resp.Diagnostics.AddAttributeError(
+			req.Path.AtName("success_threshold"),
+			"success_threshold not allowed",
+			fmt.Sprintf("success_threshold is only allowed on a readinessProbe, not on a %s. Remove it.", checkType.ValueString()),
+		)
+	}
 }
 
 func healthChecksPayload(ctx context.Context, value types.List) ([]serviceHealthCheckPayload, diag.Diagnostics) {

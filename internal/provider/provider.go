@@ -186,6 +186,7 @@ func (p *northflankProvider) Resources(_ context.Context) []func() resource.Reso
 		NewCombinedServiceResource,
 		NewVolumeResource,
 		NewAddonResource,
+		NewAddonBackupScheduleResource,
 		NewDomainResource,
 		NewDomainVerificationResource,
 		NewSubdomainResource,

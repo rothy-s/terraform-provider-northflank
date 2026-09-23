@@ -201,8 +201,8 @@ func combinedServicePlan(t *testing.T) combinedServiceModel {
 	ctx := t.Context()
 	login := "acme-bot"
 
-	ports, _ := portsValue(ctx, []servicePortPayload{{Name: "http", InternalPort: 3000, Protocol: "HTTP", Public: true}})
-	checks, _ := healthChecksValue(ctx, nil)
+	ports, _ := portsValue(ctx, []servicePortPayload{{Name: "http", InternalPort: 3000, Protocol: "HTTP", Public: true}}, types.ListNull(types.ObjectType{AttrTypes: servicePortAttrTypes}))
+	checks, _ := healthChecksValue(ctx, nil, types.ListNull(types.ObjectType{AttrTypes: serviceHealthCheckAttrTypes}))
 
 	return combinedServiceModel{
 		ProjectID:      types.StringValue("my-project"),

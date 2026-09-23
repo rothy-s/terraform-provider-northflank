@@ -97,9 +97,11 @@ func servicePlan(t *testing.T) deploymentServiceModel {
 	ctx := t.Context()
 	command := "node server.js"
 
+	disableNfDomain := true
 	ports, diags := portsValue(ctx, []servicePortPayload{
-		{Name: "http", InternalPort: 8080, Protocol: "HTTP", Public: true, Domains: []string{"api.example.com"}},
-	})
+		{Name: "http", InternalPort: 8080, Protocol: "HTTP", Public: true, Domains: []string{"api.example.com"},
+			DisableNfDomain: &disableNfDomain},
+	}, types.ListNull(types.ObjectType{AttrTypes: servicePortAttrTypes}))
 
 	if diags.HasError() {
 		t.Fatal(diags)
@@ -110,7 +112,7 @@ func servicePlan(t *testing.T) deploymentServiceModel {
 	checks, diags := healthChecksValue(ctx, []serviceHealthCheckPayload{{
 		Type: "readinessProbe", Protocol: "HTTP", Path: &path, Port: &port,
 		InitialDelaySeconds: 5, PeriodSeconds: 10, TimeoutSeconds: 2, FailureThreshold: 3, SuccessThreshold: &one,
-	}})
+	}}, types.ListNull(types.ObjectType{AttrTypes: serviceHealthCheckAttrTypes}))
 
 	if diags.HasError() {
 		t.Fatal(diags)

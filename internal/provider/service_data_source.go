@@ -128,6 +128,10 @@ func (d *serviceDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 							ElementType:         types.StringType,
 							MarkdownDescription: "Custom domains routed to this port.",
 						},
+						"disable_nf_domain": schema.BoolAttribute{
+							Computed:            true,
+							MarkdownDescription: "Whether the port's default `code.run` domain is turned off.",
+						},
 					},
 				},
 			},
@@ -261,7 +265,7 @@ func serviceDataSourceModelFrom(ctx context.Context, projectID string, service *
 	tags, d := types.SetValueFrom(ctx, types.StringType, nonNil(service.Tags))
 	diags.Append(d...)
 
-	ports, d := portsValue(ctx, service.Ports)
+	ports, d := portsValue(ctx, service.Ports, types.ListNull(types.ObjectType{AttrTypes: servicePortAttrTypes}))
 	diags.Append(d...)
 
 	model := &serviceDataSourceModel{

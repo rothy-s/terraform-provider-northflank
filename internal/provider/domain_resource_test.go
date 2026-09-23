@@ -22,11 +22,12 @@ func shortVerification(t *testing.T) {
 }
 
 // fakeDomainAPI verifies example.com on the third attempt, rejects
-// forbidden.com outright, and never verifies slow.com.
+// forbidden.com outright, never verifies slow.com, answers pending.com with
+// Northflank's 404 until the second attempt, and reports missing.com absent.
 func fakeDomainAPI(t *testing.T) (*northflank.ClientWithResponses, *atomic.Int32) {
 	t.Helper()
 
-	var attempts atomic.Int32
+	var attempts, pending, subdomain atomic.Int32
 
 	mux := http.NewServeMux()
 
@@ -35,6 +36,17 @@ func fakeDomainAPI(t *testing.T) (*northflank.ClientWithResponses, *atomic.Int32
 		case "forbidden.com":
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = fmt.Fprint(w, `{"error":{"message":"missing permission"}}`)
+		case "missing.com":
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"Domain not found"}}`)
+		case "pending.com":
+			if pending.Add(1) < 2 {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = fmt.Fprint(w, `{"error":{"message":"Could not verify TXT record."}}`)
+				return
+			}
+
+			_, _ = fmt.Fprint(w, `{"data":{}}`)
 		case "slow.com":
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = fmt.Fprint(w, `{"error":{"message":"TXT record not found"}}`)
@@ -47,6 +59,17 @@ func fakeDomainAPI(t *testing.T) (*northflank.ClientWithResponses, *atomic.Int32
 
 			_, _ = fmt.Fprint(w, `{"data":{}}`)
 		}
+	})
+
+	mux.HandleFunc("POST /v1/domains/example.com/subdomains/api/verify", func(w http.ResponseWriter, r *http.Request) {
+		if subdomain.Add(1) < 2 {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"Subdomain api.example.com could not be verified",
+				"details":{"title":"Cloudflare proxy detected"}}}`)
+			return
+		}
+
+		_, _ = fmt.Fprint(w, `{"data":{}}`)
 	})
 
 	mux.HandleFunc("GET /v1/domains/example.com", func(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +119,36 @@ func TestVerifyUntil(t *testing.T) {
 
 		if attempts.Load() != 3 {
 			t.Errorf("attempts = %d, want 3", attempts.Load())
+		}
+	})
+
+	t.Run("retries Northflank's 404 for an unverified record", func(t *testing.T) {
+		if err := verifyUntil(ctx, 5*time.Second, "domain", verifyDomain(client, "pending.com")); err != nil {
+			t.Fatalf("verifyUntil() = %v", err)
+		}
+	})
+
+	t.Run("retries Northflank's 404 for an unverified subdomain", func(t *testing.T) {
+		err := verifyUntil(ctx, 5*time.Second, "subdomain", func(ctx context.Context) error {
+			got, err := client.PostDomainsDomainSubdomainsSubdomainVerifyWithResponse(ctx, "example.com", "api")
+
+			if err != nil {
+				return err
+			}
+
+			return northflank.CheckResponse(got)
+		})
+
+		if err != nil {
+			t.Fatalf("verifyUntil() = %v", err)
+		}
+	})
+
+	t.Run("does not retry a missing domain", func(t *testing.T) {
+		err := verifyUntil(ctx, 5*time.Second, "domain", verifyDomain(client, "missing.com"))
+
+		if !isNotFound(err) {
+			t.Errorf("verifyUntil() = %v, want the 404 passed through", err)
 		}
 	})
 
@@ -150,6 +203,23 @@ func TestDomainReads(t *testing.T) {
 
 	if _, err := getDomain(ctx, client, "missing.com"); !isNotFound(err) {
 		t.Errorf("getDomain(missing.com) = %v, want a 404", err)
+	}
+}
+
+func TestVerificationRecordName(t *testing.T) {
+	for hostname, want := range map[string]string{
+		"verify-abc":                         "verify-abc.lab.example.com",
+		"verify-abc.lab.example.com":         "verify-abc.lab.example.com",
+		"verify-abc.lab.example.com.":        "verify-abc.lab.example.com",
+		"_northflank-verify.lab.example.com": "_northflank-verify.lab.example.com",
+	} {
+		if got := verificationRecordName(&hostname, "lab.example.com"); got == nil || *got != want {
+			t.Errorf("verificationRecordName(%q) = %v, want %q", hostname, got, want)
+		}
+	}
+
+	if got := verificationRecordName(nil, "example.com"); got != nil {
+		t.Errorf("verificationRecordName(nil) = %v, want nil", *got)
 	}
 }
 

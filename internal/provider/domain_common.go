@@ -112,11 +112,52 @@ func decodeData[T any](body []byte, what string) (*T, error) {
 	return envelope.Data, nil
 }
 
+// verificationRecordName returns the full DNS name of a domain's TXT
+// record. Northflank reports it relative to the domain (verify-abc for
+// verify-abc.example.com), which a DNS provider would place at the zone apex
+// when the domain is itself a subdomain of the zone.
+func verificationRecordName(hostname *string, domain string) *string {
+	if hostname == nil || *hostname == "" {
+		return hostname
+	}
+
+	name := strings.TrimSuffix(*hostname, ".")
+
+	if name == domain || strings.HasSuffix(name, "."+domain) {
+		return &name
+	}
+
+	name += "." + domain
+	return &name
+}
+
+// notVerifiableYet reports whether a verification failure means the DNS
+// record is missing or not yet propagated. Northflank answers that with a
+// 400, or with a 404 that is told apart from a missing domain by its message:
+// "Could not verify TXT record" for a domain, "Subdomain ... could not be
+// verified" for a subdomain. The latter includes seeing a Cloudflare proxy,
+// which a proxied wildcard record answers until the new record propagates.
+func notVerifiableYet(err error) bool {
+	var apiErr *northflank.APIError
+
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	switch apiErr.StatusCode {
+	case http.StatusBadRequest:
+		return true
+	case http.StatusNotFound:
+		message := strings.ToLower(apiErr.Message)
+		return strings.Contains(message, "could not verify") || strings.Contains(message, "could not be verified")
+	}
+
+	return false
+}
+
 // verifyUntil calls verify until it succeeds, the API rejects the request for
-// a reason other than "not verifiable yet", or the timeout passes. A 400 is
-// what Northflank returns while the DNS record is missing or not yet
-// propagated, so it is retried; transient failures are retried by verify
-// itself.
+// a reason other than "not verifiable yet", or the timeout passes. Transient
+// failures are retried by verify itself.
 func verifyUntil(ctx context.Context, timeout time.Duration, what string, verify func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -130,9 +171,7 @@ func verifyUntil(ctx context.Context, timeout time.Duration, what string, verify
 			return nil
 		}
 
-		var apiErr *northflank.APIError
-
-		if ctx.Err() == nil && !(errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusBadRequest) {
+		if ctx.Err() == nil && !notVerifiableYet(err) {
 			return err
 		}
 

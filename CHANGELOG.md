@@ -10,8 +10,36 @@ caveat that minor releases may still break.
 
 ## Unreleased
 
+### Added
+
+- `northflank_addon_backup_schedule` resource: scheduled `dump` or `snapshot`
+  backups of an addon, hourly, daily or weekly, with a retention time.
+  Northflank cannot change a schedule, so any change replaces it.
+- `disable_nf_domain` on service ports, to stop routing the default `code.run`
+  domain of a public HTTP port that has custom domains. The service data
+  source reports it too.
+
 ### Fixed
 
+- Domain verification failed with "HTTP 404: Could not verify TXT record" for
+  a domain below the DNS zone, such as `lab.example.com` in `example.com`.
+  `verification_record_name` was the name relative to the domain
+  (`verify-abc`), so a DNS provider put the record at `verify-abc.example.com`.
+  It is now the full name (`verify-abc.lab.example.com`). Verification also
+  keeps retrying on that 404, which Northflank returns while the record is
+  missing or not yet propagated, instead of failing at once. The same goes
+  for subdomains ("Subdomain ... could not be verified"), including
+  "Cloudflare proxy detected" while a proxied wildcard record still answers
+  for a new, unproxied CNAME.
+- Updating a service with a liveness or startup probe failed with
+  "successThreshold is only allowed when 'type' is set to 'readinessProbe'":
+  `success_threshold` defaulted to 1 on every probe. It is now sent only when
+  set, rejected at plan time on anything but a `readinessProbe`, and a
+  threshold Northflank reports for a probe that did not set one is not
+  recorded.
+- API errors now include the details Northflank sends with them, such as the
+  field-level reasons behind "Request failed payload validation - see
+  details", instead of dropping them.
 - "Provider produced inconsistent result after apply" when Northflank leaves
   a configured value out of its response: a repository's `account_login` on
   jobs, build services and combined services, and a secret group's `type` and

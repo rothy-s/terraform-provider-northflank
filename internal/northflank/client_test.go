@@ -38,6 +38,22 @@ func TestCheckResponse(t *testing.T) {
 			wantMsg: "HTTP 409: project already exists (request req-1)",
 		},
 		{
+			name: "validation details are passed on",
+			resp: stubResponse{status: http.StatusBadRequest, body: []byte(`{"error":{"status":400,` +
+				`"message":"Request failed payload validation - see details.","id":"nf-invalid-request-body",` +
+				`"details":{"healthChecks.0.successThreshold":["must be 1 for liveness probes"]}}}`)},
+			wantErr: true,
+			wantMsg: "HTTP 400: Request failed payload validation - see details. (request nf-invalid-request-body)" +
+				"\nDetails: {\"details\":{\"healthChecks.0.successThreshold\":[\"must be 1 for liveness probes\"]}}",
+		},
+		{
+			name: "top-level details are passed on too",
+			resp: stubResponse{status: http.StatusBadRequest, body: []byte(`{"error":{"message":"invalid"},` +
+				`"details":[{"path":"ports.0.name","message":"too long"}]}`)},
+			wantErr: true,
+			wantMsg: "HTTP 400: invalid\nDetails: {\"details\":[{\"path\":\"ports.0.name\",\"message\":\"too long\"}]}",
+		},
+		{
 			name:    "error without a request id",
 			resp:    stubResponse{status: http.StatusBadRequest, body: []byte(`{"error":{"status":400,"message":"bad name"}}`)},
 			wantErr: true,

@@ -222,6 +222,13 @@ func (r *deploymentServiceResource) Schema(_ context.Context, _ resource.SchemaR
 							Default:             setdefault.StaticValue(types.SetValueMust(types.StringType, nil)),
 							MarkdownDescription: "Custom domains routed to this port. Each must already be verified in Northflank.",
 						},
+						"disable_nf_domain": schema.BoolAttribute{
+							Optional: true,
+							Computed: true,
+							Default:  booldefault.StaticBool(false),
+							MarkdownDescription: "Stop routing the port's default `code.run` domain, so that it is reachable only " +
+								"through `domains`. For public HTTP ports with custom domains. Defaults to `false`.",
+						},
 					},
 				},
 			},
@@ -291,14 +298,16 @@ func (r *deploymentServiceResource) Schema(_ context.Context, _ resource.SchemaR
 							},
 						},
 						"success_threshold": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							Default:             int64default.StaticInt64(1),
-							MarkdownDescription: "Successful checks in a row before the instance counts as healthy. Defaults to `1`.",
+							Optional: true,
+							MarkdownDescription: "Successful checks in a row before the instance counts as ready, " +
+								"1 to 255. Only for a `readinessProbe`: Northflank rejects it on other probe types.",
 							Validators: []validator.Int64{
 								int64validator.Between(1, 255),
 							},
 						},
+					},
+					Validators: []validator.Object{
+						healthCheckSuccessThresholdValidator{},
 					},
 				},
 			},
@@ -582,11 +591,11 @@ func applyDeploymentService(ctx context.Context, model *deploymentServiceModel, 
 	diags.Append(d...)
 	model.Deployment = deployment
 
-	ports, d := portsValue(ctx, service.Ports)
+	ports, d := portsValue(ctx, service.Ports, model.Ports)
 	diags.Append(d...)
 	model.Ports = ports
 
-	healthChecks, d := healthChecksValue(ctx, service.HealthChecks)
+	healthChecks, d := healthChecksValue(ctx, service.HealthChecks, model.HealthChecks)
 	diags.Append(d...)
 	model.HealthChecks = healthChecks
 

@@ -33,7 +33,7 @@ output "subdomains" {
 
 - `status` (String) `pending` or `verified`.
 - `subdomains` (Attributes List) Subdomains added to the domain. (see [below for nested schema](#nestedatt--subdomains))
-- `verification_record_name` (String) Name of the TXT record that proves ownership.
+- `verification_record_name` (String) Full DNS name of the TXT record that proves ownership.
 - `verification_record_value` (String) Value of the TXT record that proves ownership.
 
 <a id="nestedatt--subdomains"></a>

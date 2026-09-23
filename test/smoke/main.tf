@@ -270,6 +270,16 @@ resource "northflank_addon" "db" {
   database_name   = "smoke"
 }
 
+resource "northflank_addon_backup_schedule" "db_daily" {
+  project_id     = northflank_project.smoke.id
+  addon_id       = northflank_addon.db.id
+  backup_type    = "dump"
+  interval       = "daily"
+  hours          = [3]
+  minutes        = [0]
+  retention_days = 7
+}
+
 data "northflank_addon" "by_id" {
   project_id = northflank_project.smoke.id
   id         = northflank_addon.db.id

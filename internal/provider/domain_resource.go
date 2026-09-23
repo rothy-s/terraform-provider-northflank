@@ -74,8 +74,9 @@ func (r *domainResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"verification_record_name": schema.StringAttribute{
-				Computed:            true,
-				MarkdownDescription: "Name of the TXT record to create to prove ownership.",
+				Computed: true,
+				MarkdownDescription: "Full DNS name of the TXT record to create to prove ownership, such as `verify-abc123.example.com`. " +
+					"With a DNS provider that takes names relative to the zone, strip the zone from it.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -222,6 +223,6 @@ func applyDomain(model *domainResourceModel, read *domainRead) {
 	model.ID = types.StringValue(read.Name)
 	model.Domain = types.StringValue(read.Name)
 	model.Status = types.StringValue(read.Status)
-	model.VerificationRecordName = types.StringPointerValue(read.Hostname)
+	model.VerificationRecordName = types.StringPointerValue(verificationRecordName(read.Hostname, read.Name))
 	model.VerificationRecordValue = types.StringPointerValue(read.Token)
 }

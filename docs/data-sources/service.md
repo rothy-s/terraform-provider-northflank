@@ -72,6 +72,7 @@ resource "northflank_job" "backfill" {
 
 Read-Only:
 
+- `disable_nf_domain` (Boolean) Whether the port's default `code.run` domain is turned off.
 - `domains` (Set of String) Custom domains routed to this port.
 - `internal_port` (Number) Port number the container listens on.
 - `name` (String) Name identifying the port.
