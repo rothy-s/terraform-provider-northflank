@@ -451,11 +451,12 @@ func buildSettingsPayloadFrom(ctx context.Context, value types.Object) (*buildSe
 
 // repositoryValue converts the reported repository into the block.
 //
-// Northflank may report the Git account it picked even when the configuration
-// left the choice to it. The optional account fields therefore stay unset
-// when the prior value is unset, so that Terraform does not see an
-// inconsistent result; with no prior value, as after an import, they are
-// recorded as reported.
+// The optional account fields are reported unreliably in both directions:
+// Northflank may report the Git account it picked when the configuration left
+// the choice to it, and may leave out an account that was configured. Either
+// would make Terraform see an inconsistent result, so reportedOptional keeps
+// the configured value in both cases. With no prior value, as after an
+// import, they are recorded as reported.
 func repositoryValue(ctx context.Context, prior types.Object, service *serviceRead) (types.Object, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
@@ -464,26 +465,20 @@ func repositoryValue(ctx context.Context, prior types.Object, service *serviceRe
 	}
 
 	v := service.VcsData
-	accountLogin := types.StringPointerValue(v.AccountLogin)
-	vcsLinkID := types.StringPointerValue(v.VcsLinkID)
-	selfHostedVcsID := types.StringPointerValue(v.SelfHostedVcsID)
-
-	if !prior.IsNull() && !prior.IsUnknown() {
-		var repo repositoryModel
-		diags.Append(prior.As(ctx, &repo, objectAsOptions)...)
-
-		if repo.AccountLogin.IsNull() {
-			accountLogin = types.StringNull()
-		}
-
-		if repo.VcsLinkID.IsNull() {
-			vcsLinkID = types.StringNull()
-		}
-
-		if repo.SelfHostedVcsID.IsNull() {
-			selfHostedVcsID = types.StringNull()
-		}
+	repo := repositoryModel{
+		AccountLogin:    types.StringNull(),
+		VcsLinkID:       types.StringNull(),
+		SelfHostedVcsID: types.StringNull(),
 	}
+	hasPrior := !prior.IsNull() && !prior.IsUnknown()
+
+	if hasPrior {
+		diags.Append(prior.As(ctx, &repo, objectAsOptions)...)
+	}
+
+	accountLogin := reportedOptional(repo.AccountLogin, v.AccountLogin, hasPrior)
+	vcsLinkID := reportedOptional(repo.VcsLinkID, v.VcsLinkID, hasPrior)
+	selfHostedVcsID := reportedOptional(repo.SelfHostedVcsID, v.SelfHostedVcsID, hasPrior)
 
 	return types.ObjectValueMust(repositoryAttrTypes, map[string]attr.Value{
 		"url":                types.StringValue(v.ProjectURL),
@@ -492,6 +487,24 @@ func repositoryValue(ctx context.Context, prior types.Object, service *serviceRe
 		"vcs_link_id":        vcsLinkID,
 		"self_hosted_vcs_id": selfHostedVcsID,
 	}), diags
+}
+
+// reportedOptional decides an optional attribute the API reports
+// unreliably. Without a prior value it takes what is reported. With one, an
+// unset attribute stays unset whatever is reported, and a set attribute keeps
+// its value when nothing is reported; a different reported value is drift and
+// is taken.
+func reportedOptional(prior types.String, reported *string, hasPrior bool) types.String {
+	switch {
+	case !hasPrior:
+		return types.StringPointerValue(reported)
+	case prior.IsNull() || prior.IsUnknown():
+		return types.StringNull()
+	case reported == nil || *reported == "":
+		return prior
+	default:
+		return types.StringValue(*reported)
+	}
 }
 
 // buildSettingsValue converts the reported build settings into the block.

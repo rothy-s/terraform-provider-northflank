@@ -10,6 +10,14 @@ caveat that minor releases may still break.
 
 ## Unreleased
 
+### Fixed
+
+- "Provider produced inconsistent result after apply" when Northflank leaves
+  a configured value out of its response: a repository's `account_login` on
+  jobs, build services and combined services, and a secret group's `type` and
+  `secret_type`. The configured value is now kept when nothing is reported,
+  while a different reported value still shows as drift.
+
 ### Added
 
 - `northflank_project` resource: creates a project in a Northflank region or

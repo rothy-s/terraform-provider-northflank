@@ -524,8 +524,10 @@ func applySecretGroup(ctx context.Context, model *secretGroupResourceModel, grou
 	model.Name = types.StringValue(group.Name)
 	model.Description = types.StringPointerValue(group.Description)
 	model.Priority = types.Int64Value(int64(group.Priority))
-	model.SecretType = types.StringValue(group.SecretType)
-	model.Type = types.StringValue(group.Type)
+	// The API has been seen leaving these out despite the spec marking them
+	// required; keep the configured value rather than record an empty one.
+	model.SecretType = reportedOrKept(model.SecretType, group.SecretType, secretGroupDefaultSecretType)
+	model.Type = reportedOrKept(model.Type, group.Type, secretGroupDefaultType)
 	model.CreatedAt = timeValue(group.CreatedAt)
 	model.UpdatedAt = timeValue(group.UpdatedAt)
 
@@ -594,4 +596,17 @@ func nonNil(values []string) []string {
 	}
 
 	return values
+}
+
+// reportedOrKept takes a reported value, or, when the API leaves it out, the
+// known prior value, or failing that the schema default.
+func reportedOrKept(prior types.String, reported, fallback string) types.String {
+	switch {
+	case reported != "":
+		return types.StringValue(reported)
+	case !prior.IsNull() && !prior.IsUnknown():
+		return prior
+	default:
+		return types.StringValue(fallback)
+	}
 }
