@@ -297,3 +297,25 @@ resource "northflank_subdomain_verification" "api" {
 data "northflank_domain" "root" {
   domain = northflank_domain_verification.root.domain
 }
+
+resource "northflank_preview_blueprint" "pr" {
+  project_id = northflank_project.smoke.id
+
+  template = jsonencode({
+    name       = "Smoke Previews"
+    apiVersion = "v1.2"
+    triggers = [
+      { kind = "webhook", ref = "hook", spec = { token = "$${args.WEBHOOK_TOKEN}" } },
+    ]
+    spec = { kind = "Workflow", spec = { type = "sequential", steps = [] } }
+  })
+
+  argument_overrides = {
+    WEBHOOK_TOKEN = "smoke-token"
+  }
+}
+
+data "northflank_preview_blueprint" "by_id" {
+  project_id = northflank_project.smoke.id
+  id         = northflank_preview_blueprint.pr.id
+}

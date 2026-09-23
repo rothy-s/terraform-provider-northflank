@@ -31,4 +31,4 @@
 * Addon datasource (done)
 * Volume resource (done)
 * Volume datasource (done)
-* Blueprint for preview?
+* Blueprint for preview (done)

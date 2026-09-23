@@ -74,6 +74,15 @@ caveat that minor releases may still break.
   in the same apply.
 - `northflank_domain` data source: a registered domain's status,
   verification record and subdomains.
+- `northflank_preview_blueprint` resource: a preview blueprint from a JSON
+  template, typically read from the repository with `file()`, with argument
+  overrides for secrets such as webhook tokens. Terraform delivers the
+  template; the blueprint is never linked to the repository through GitOps,
+  so Northflank never writes to it. The name comes from the template;
+  renaming replaces the blueprint. Supports import as
+  `<project_id>/<preview_blueprint_id>`.
+- `northflank_preview_blueprint` data source: looks up a blueprint by `id` or
+  `name` within a project.
 - `northflank_service` data source: looks up a service of any kind by `id` or
   `name` within a project, including its repository and branch.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with

@@ -190,6 +190,7 @@ func (p *northflankProvider) Resources(_ context.Context) []func() resource.Reso
 		NewDomainVerificationResource,
 		NewSubdomainResource,
 		NewSubdomainVerificationResource,
+		NewPreviewBlueprintResource,
 	}
 }
 
@@ -202,6 +203,7 @@ func (p *northflankProvider) DataSources(_ context.Context) []func() datasource.
 		NewVolumeDataSource,
 		NewAddonDataSource,
 		NewDomainDataSource,
+		NewPreviewBlueprintDataSource,
 	}
 }
 

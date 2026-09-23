@@ -28,16 +28,18 @@ acceptance tests against the live API.
 | `northflank_domain_verification`    | replace only (`timeout` in place)                     |
 | `northflank_subdomain`              | replace only                                          |
 | `northflank_subdomain_verification` | replace only (`timeout` in place)                     |
+| `northflank_preview_blueprint`      | all but `project_id` and the template's `name`        |
 
-| Data source               | Lookup keys                     |
-| ------------------------- | ------------------------------- |
-| `northflank_project`      | `id`, or `name`                 |
-| `northflank_secret_group` | `project_id` + (`id` or `name`) |
-| `northflank_job`          | `project_id` + (`id` or `name`) |
-| `northflank_service`      | `project_id` + (`id` or `name`) |
-| `northflank_volume`       | `project_id` + (`id` or `name`) |
-| `northflank_addon`        | `project_id` + (`id` or `name`) |
-| `northflank_domain`       | `domain`                        |
+| Data source                    | Lookup keys                     |
+| ------------------------------ | ------------------------------- |
+| `northflank_project`           | `id`, or `name`                 |
+| `northflank_secret_group`      | `project_id` + (`id` or `name`) |
+| `northflank_job`               | `project_id` + (`id` or `name`) |
+| `northflank_service`           | `project_id` + (`id` or `name`) |
+| `northflank_volume`            | `project_id` + (`id` or `name`) |
+| `northflank_addon`             | `project_id` + (`id` or `name`) |
+| `northflank_domain`            | `domain`                        |
+| `northflank_preview_blueprint` | `project_id` + (`id` or `name`) |
 
 A few things worth knowing about projects:
 
@@ -154,6 +156,23 @@ And about domains:
   resource orders the apply correctly.
 - **Not supported yet:** wildcard certificates and certificate import,
   wildcard redirects, CDN, path-based routing rules and geo-routing rules.
+
+And about preview blueprints:
+
+- **The template is passed through as JSON**, usually with `file()` from the
+  repository Terraform runs in, since Northflank's template language has no
+  schema in the API document.
+- **No GitOps.** Terraform delivers the template, and the blueprint is never
+  linked to a repository, because with GitOps Northflank writes the template
+  back to it. A `gitops` key in the file is dropped. A change to the file
+  reaches Northflank on the next apply; changes made in the dashboard are not
+  detected.
+- **Keep secrets out of the file**: reference them as `${args.NAME}` and set
+  `argument_overrides`, which Northflank stores apart from the template. That
+  suits a webhook trigger's token.
+- **Runs are not managed.** Start them from CI with
+  `POST /v1/projects/{projectId}/preview-blueprints/{id}/runs`, using the
+  blueprint's `id`, or through a Git or webhook trigger in the template.
 
 ## Usage
 
