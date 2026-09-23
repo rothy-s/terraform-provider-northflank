@@ -75,6 +75,11 @@ And about jobs:
   from Git like a combined service. Exactly one is checked at plan time. A
   Git-built job's repository and build settings are read back; its build
   arguments and build plan are not.
+- **`run_on_source_change`** decides whether a new build of the job's source
+  also runs it: `never` (the default: builds happen, runs only when started or
+  scheduled), `always`, or `cd-promote`. The API does not report it back.
+- **`storage_size`** in a `dockerfile` or `buildpack` block sets each build's
+  ephemeral disk in MB, on jobs, build services and combined services alike.
 - **Not supported yet:** health checks, GPUs and secret files.
 
 And about services:

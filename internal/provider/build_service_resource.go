@@ -465,7 +465,7 @@ func applyBuildService(ctx context.Context, model *buildServiceResourceModel, se
 	diags.Append(d...)
 	model.Tags = tags
 
-	build, d := buildSettingsValue(ctx, service)
+	build, d := buildSettingsValue(ctx, model.Build, service)
 	diags.Append(d...)
 	model.Build = build
 

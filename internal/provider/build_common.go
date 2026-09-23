@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -12,7 +13,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -24,8 +27,13 @@ import (
 
 // Enumerations and constraints copied from the OpenAPI document.
 var (
-	vcsProviders   = []string{"github", "gitlab", "bitbucket", "azure", "self-hosted", "origin"}
-	buildEngines   = []string{"buildkit", "kaniko"}
+	vcsProviders = []string{"github", "gitlab", "bitbucket", "azure", "self-hosted", "origin"}
+	buildEngines = []string{"buildkit", "kaniko"}
+	// Ephemeral storage per build, in MB. The spec also caps it at 65536; the
+	// larger sizes are presumably plan-dependent, so they are accepted and
+	// left for Northflank to refuse.
+	buildStorageSizes = []int64{16384, 32768, 65536, 131072, 262144, 524288}
+
 	buildpackStack = []string{
 		"HEROKU_24", "HEROKU_22", "HEROKU_22_CLASSIC", "HEROKU_20", "HEROKU_18", "GOOGLE_22", "GOOGLE_V1",
 		"CNB_ALPINE", "CNB_BIONIC", "PAKETO_JAMMY_TINY", "PAKETO_JAMMY_BASE", "PAKETO_JAMMY_FULL",
@@ -68,6 +76,7 @@ type dockerfileBuildModel struct {
 	Target      types.String `tfsdk:"target"`
 	BuildEngine types.String `tfsdk:"build_engine"`
 	UseCache    types.Bool   `tfsdk:"use_cache"`
+	StorageSize types.Int64  `tfsdk:"storage_size"`
 }
 
 type buildpackBuildModel struct {
@@ -75,6 +84,7 @@ type buildpackBuildModel struct {
 	BuildContext types.String `tfsdk:"build_context"`
 	Buildpacks   types.List   `tfsdk:"buildpacks"`
 	UseCache     types.Bool   `tfsdk:"use_cache"`
+	StorageSize  types.Int64  `tfsdk:"storage_size"`
 }
 
 var (
@@ -92,6 +102,7 @@ var (
 		"target":       types.StringType,
 		"build_engine": types.StringType,
 		"use_cache":    types.BoolType,
+		"storage_size": types.Int64Type,
 	}
 
 	buildpackBuildAttrTypes = map[string]attr.Type{
@@ -99,6 +110,7 @@ var (
 		"build_context": types.StringType,
 		"buildpacks":    types.ListType{ElemType: types.StringType},
 		"use_cache":     types.BoolType,
+		"storage_size":  types.Int64Type,
 	}
 
 	buildSettingsAttrTypes = map[string]attr.Type{
@@ -128,6 +140,43 @@ type dockerfileSettingsPayload struct {
 	DockerFilePath string                   `json:"dockerFilePath"`
 	DockerWorkDir  string                   `json:"dockerWorkDir"`
 	Buildkit       *buildkitSettingsPayload `json:"buildkit,omitempty"`
+	Storage        *buildStoragePayload     `json:"storage,omitempty"`
+}
+
+// buildStoragePayload is the ephemeral disk each build gets, in the shape the
+// API both takes and reports.
+type buildStoragePayload struct {
+	EphemeralStorage *struct {
+		StorageSize *int64 `json:"storageSize,omitempty"`
+	} `json:"ephemeralStorage,omitempty"`
+}
+
+func buildStorage(size types.Int64) *buildStoragePayload {
+	if size.IsNull() || size.IsUnknown() {
+		return nil
+	}
+
+	value := size.ValueInt64()
+	storage := &buildStoragePayload{}
+	storage.EphemeralStorage = &struct {
+		StorageSize *int64 `json:"storageSize,omitempty"`
+	}{StorageSize: &value}
+
+	return storage
+}
+
+// storageSizeValue reads a reported build storage size, falling back to the
+// prior value when Northflank does not report one.
+func storageSizeValue(reported *buildStoragePayload, prior types.Int64) types.Int64 {
+	if reported != nil && reported.EphemeralStorage != nil && reported.EphemeralStorage.StorageSize != nil {
+		return types.Int64Value(*reported.EphemeralStorage.StorageSize)
+	}
+
+	if prior.IsUnknown() {
+		return types.Int64Null()
+	}
+
+	return prior
 }
 
 type buildkitSettingsPayload struct {
@@ -135,10 +184,11 @@ type buildkitSettingsPayload struct {
 }
 
 type buildpackSettingsPayload struct {
-	Builder           string   `json:"builder"`
-	BuildContext      string   `json:"buildContext"`
-	BuildpackLocators []string `json:"buildpackLocators"`
-	UseCache          bool     `json:"useCache"`
+	Builder           string               `json:"builder"`
+	BuildContext      string               `json:"buildContext"`
+	BuildpackLocators []string             `json:"buildpackLocators"`
+	UseCache          bool                 `json:"useCache"`
+	Storage           *buildStoragePayload `json:"storage,omitempty"`
 }
 
 // buildConfigurationPayload is the subset of buildConfiguration the provider
@@ -244,6 +294,7 @@ func buildSettingsAttribute() schema.SingleNestedAttribute {
 						MarkdownDescription: "Keep build layers in persistent storage between builds. Only applies " +
 							"to the `buildkit` engine. Defaults to `false`.",
 					},
+					"storage_size": buildStorageSizeAttribute(),
 				},
 			},
 			"buildpack": schema.SingleNestedAttribute{
@@ -281,8 +332,26 @@ func buildSettingsAttribute() schema.SingleNestedAttribute {
 						Default:             booldefault.StaticBool(false),
 						MarkdownDescription: "Cache build dependencies between builds. Defaults to `false`.",
 					},
+					"storage_size": buildStorageSizeAttribute(),
 				},
 			},
+		},
+	}
+}
+
+// buildStorageSizeAttribute is the ephemeral disk each build gets.
+func buildStorageSizeAttribute() schema.Int64Attribute {
+	return schema.Int64Attribute{
+		Optional: true,
+		Computed: true,
+		MarkdownDescription: "Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, " +
+			"`131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes " +
+			"are available may depend on the plan.",
+		Validators: []validator.Int64{
+			int64validator.OneOf(buildStorageSizes...),
+		},
+		PlanModifiers: []planmodifier.Int64{
+			int64planmodifier.UseStateForUnknown(),
 		},
 	}
 }
@@ -344,6 +413,7 @@ func buildSettingsPayloadFrom(ctx context.Context, value types.Object) (*buildSe
 			BuildEngine:    docker.BuildEngine.ValueString(),
 			DockerFilePath: docker.Path.ValueString(),
 			DockerWorkDir:  docker.WorkDir.ValueString(),
+			Storage:        buildStorage(docker.StorageSize),
 		}
 
 		// The cache setting belongs to the buildkit engine only.
@@ -368,6 +438,7 @@ func buildSettingsPayloadFrom(ctx context.Context, value types.Object) (*buildSe
 			BuildContext:      pack.BuildContext.ValueString(),
 			BuildpackLocators: locators,
 			UseCache:          pack.UseCache.ValueBool(),
+			Storage:           buildStorage(pack.StorageSize),
 		}
 
 		return payload, nil, diags
@@ -424,11 +495,29 @@ func repositoryValue(ctx context.Context, prior types.Object, service *serviceRe
 }
 
 // buildSettingsValue converts the reported build settings into the block.
-func buildSettingsValue(ctx context.Context, service *serviceRead) (types.Object, diag.Diagnostics) {
+// The prior block supplies the storage size when Northflank does not report
+// one.
+func buildSettingsValue(ctx context.Context, prior types.Object, service *serviceRead) (types.Object, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	dockerfile := types.ObjectNull(dockerfileBuildAttrTypes)
 	buildpack := types.ObjectNull(buildpackBuildAttrTypes)
+
+	var priorSettings buildSettingsModel
+	priorDocker := dockerfileBuildModel{StorageSize: types.Int64Null()}
+	priorPack := buildpackBuildModel{StorageSize: types.Int64Null()}
+
+	if !prior.IsNull() && !prior.IsUnknown() {
+		diags.Append(prior.As(ctx, &priorSettings, objectAsOptions)...)
+
+		if !priorSettings.Dockerfile.IsNull() && !priorSettings.Dockerfile.IsUnknown() {
+			diags.Append(priorSettings.Dockerfile.As(ctx, &priorDocker, objectAsOptions)...)
+		}
+
+		if !priorSettings.Buildpack.IsNull() && !priorSettings.Buildpack.IsUnknown() {
+			diags.Append(priorSettings.Buildpack.As(ctx, &priorPack, objectAsOptions)...)
+		}
+	}
 
 	if s := service.BuildSettings; s != nil && s.Dockerfile != nil {
 		d := s.Dockerfile
@@ -450,6 +539,7 @@ func buildSettingsValue(ctx context.Context, service *serviceRead) (types.Object
 			"target":       types.StringPointerValue(target),
 			"build_engine": types.StringValue(engine),
 			"use_cache":    types.BoolValue(d.Buildkit != nil && d.Buildkit.UseCache),
+			"storage_size": storageSizeValue(d.Storage, priorDocker.StorageSize),
 		})
 	}
 
@@ -464,6 +554,7 @@ func buildSettingsValue(ctx context.Context, service *serviceRead) (types.Object
 			"build_context": types.StringValue(orDefault(b.BuildContext, defaultBuildContext)),
 			"buildpacks":    locators,
 			"use_cache":     types.BoolValue(b.UseCache),
+			"storage_size":  storageSizeValue(b.Storage, priorPack.StorageSize),
 		})
 	}
 

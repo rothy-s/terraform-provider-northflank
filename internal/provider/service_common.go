@@ -69,12 +69,14 @@ type serviceRead struct {
 			Buildkit       *struct {
 				UseCache bool `json:"useCache"`
 			} `json:"buildkit"`
+			Storage *buildStoragePayload `json:"storage"`
 		} `json:"dockerfile"`
 		Buildpack *struct {
-			Builder           string   `json:"builder"`
-			BuildContext      string   `json:"buildContext"`
-			BuildpackLocators []string `json:"buildpackLocators"`
-			UseCache          bool     `json:"useCache"`
+			Builder           string               `json:"builder"`
+			BuildContext      string               `json:"buildContext"`
+			BuildpackLocators []string             `json:"buildpackLocators"`
+			UseCache          bool                 `json:"useCache"`
+			Storage           *buildStoragePayload `json:"storage"`
 		} `json:"buildpack"`
 	} `json:"buildSettings"`
 	BuildConfiguration *struct {

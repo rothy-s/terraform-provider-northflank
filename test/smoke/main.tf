@@ -321,9 +321,10 @@ data "northflank_preview_blueprint" "by_id" {
 }
 
 resource "northflank_job" "from_git" {
-  project_id      = northflank_project.smoke.id
-  name            = "Smoke Git Job"
-  deployment_plan = "nf-compute-10"
+  project_id           = northflank_project.smoke.id
+  name                 = "Smoke Git Job"
+  deployment_plan      = "nf-compute-10"
+  run_on_source_change = "always"
 
   repository = {
     url      = "https://github.com/acme/smoke"
@@ -332,7 +333,9 @@ resource "northflank_job" "from_git" {
   branch = "main"
 
   build = {
-    buildpack = {}
+    buildpack = {
+      storage_size = 16384
+    }
   }
 
   build_arguments = {

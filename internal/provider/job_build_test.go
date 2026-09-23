@@ -225,3 +225,77 @@ func TestJobDataSourceReportsRepository(t *testing.T) {
 		t.Errorf("repository_url %v, branch %v; want null for a job without Git", model.RepositoryURL, model.Branch)
 	}
 }
+
+func TestBuildStoragePayload(t *testing.T) {
+	ctx := t.Context()
+	settings, _, diags := buildSettingsPayloadFrom(ctx, dockerfileBuild("buildkit", nil))
+
+	if diags.HasError() {
+		t.Fatal(diags)
+	}
+
+	raw, _ := json.Marshal(settings.Dockerfile.Storage)
+
+	if string(raw) != `{"ephemeralStorage":{"storageSize":16384}}` {
+		t.Errorf("storage = %s", raw)
+	}
+
+	if buildStorage(types.Int64Null()) != nil || buildStorage(types.Int64Unknown()) != nil {
+		t.Error("an unset storage size was sent")
+	}
+}
+
+// Northflank reporting a size wins; not reporting one keeps what was set, so
+// that an apply does not come back inconsistent.
+func TestStorageSizeValue(t *testing.T) {
+	size := int64(32768)
+	reported := &buildStoragePayload{}
+	reported.EphemeralStorage = &struct {
+		StorageSize *int64 `json:"storageSize,omitempty"`
+	}{StorageSize: &size}
+
+	if got := storageSizeValue(reported, types.Int64Value(16384)); got.ValueInt64() != 32768 {
+		t.Errorf("reported size: got %v", got)
+	}
+
+	if got := storageSizeValue(nil, types.Int64Value(16384)); got.ValueInt64() != 16384 {
+		t.Errorf("unreported size: got %v, want the prior value", got)
+	}
+
+	if got := storageSizeValue(nil, types.Int64Unknown()); !got.IsNull() {
+		t.Errorf("unreported, unknown size: got %v, want null", got)
+	}
+}
+
+func TestJobRunOnSourceChange(t *testing.T) {
+	ctx := t.Context()
+
+	plan := gitJobPlan(t)
+	plan.RunOnSourceChange = types.StringValue("always")
+	payload, diags := jobPayloadFrom(ctx, &plan)
+
+	if diags.HasError() {
+		t.Fatal(diags)
+	}
+
+	if payload.Settings.RunOnSourceChange != "always" {
+		t.Errorf("runOnSourceChange = %q", payload.Settings.RunOnSourceChange)
+	}
+
+	body, _ := jobRequestBody(ctx, &plan)
+	roundTrip(t, body, &northflank.PutProjectsJobsJSONRequestBody{})
+
+	// Not reported by the API: kept when known, the default after an import.
+	applyJob(ctx, &plan, &jobView{ID: "j", Name: "J"})
+
+	if plan.RunOnSourceChange.ValueString() != "always" {
+		t.Errorf("run_on_source_change = %v, want it kept", plan.RunOnSourceChange)
+	}
+
+	imported := jobResourceModel{RunOnSourceChange: types.StringNull()}
+	applyJob(ctx, &imported, &jobView{ID: "j", Name: "J"})
+
+	if imported.RunOnSourceChange.ValueString() != "never" {
+		t.Errorf("imported run_on_source_change = %v, want never", imported.RunOnSourceChange)
+	}
+}

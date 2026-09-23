@@ -78,10 +78,15 @@ resource "northflank_job" "cleanup" {
 
   build = {
     dockerfile = {
-      path   = "/jobs/cleanup/Dockerfile"
-      target = "runtime"
+      path         = "/jobs/cleanup/Dockerfile"
+      target       = "runtime"
+      storage_size = 16384 # 16 GB of disk per build
     }
   }
+
+  # Every push to main is built; "always" also runs the job on each new
+  # build, rather than only on its schedule or when started by hand.
+  run_on_source_change = "always"
 
   build_arguments = {
     NODE_ENV = "production"
@@ -122,6 +127,7 @@ The API does not report the image or build service back, so a change made outsid
 - `description` (String) Short description of the job, up to 200 characters. Removing it from configuration keeps the current value.
 - `disable_ci` (Boolean) For a job that builds from Git: stop building new commits automatically. Defaults to `false`.
 - `repository` (Attributes) Build the job from this Git repository, like a combined service, instead of running an image or a build service's output. Requires `branch` and `build`. (see [below for nested schema](#nestedatt--repository))
+- `run_on_source_change` (String) Whether a new build of the job's source starts a run: `never` (runs only start when triggered or scheduled), `always` (every new build, such as each push to the branch, also runs the job), or `cd-promote` (on promotion in a pipeline). Applies to jobs that build from Git or run a build service's output. Defaults to `never`. The API does not report it back, so a change made outside Terraform is not detected.
 - `runtime_environment` (Map of String, Sensitive) Environment variables set on every run, as a map of name to value. The API does not report these back, so a change made outside Terraform is not detected. Values shared by several jobs or services belong in a `northflank_secret_group`.
 - `tags` (Set of String) Previously defined Northflank tags to attach to the job.
 
@@ -150,6 +156,7 @@ Optional:
 - `build_context` (String) Directory in the repository to build. Defaults to `/`.
 - `builder` (String) Buildpack stack. Defaults to `HEROKU_24`.
 - `buildpacks` (List of String) Custom buildpacks to use instead of the stack's defaults, in order.
+- `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `use_cache` (Boolean) Cache build dependencies between builds. Defaults to `false`.
 
 
@@ -160,6 +167,7 @@ Optional:
 
 - `build_engine` (String) `buildkit` or `kaniko`. Defaults to `buildkit`.
 - `path` (String) Path of the Dockerfile in the repository. Defaults to `/Dockerfile`.
+- `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `target` (String) Stage to build, for a multi-stage Dockerfile.
 - `use_cache` (Boolean) Keep build layers in persistent storage between builds. Only applies to the `buildkit` engine. Defaults to `false`.
 - `work_dir` (String) Build context directory in the repository. Defaults to `/`.

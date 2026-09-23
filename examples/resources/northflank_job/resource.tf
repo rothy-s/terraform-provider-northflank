@@ -60,10 +60,15 @@ resource "northflank_job" "cleanup" {
 
   build = {
     dockerfile = {
-      path   = "/jobs/cleanup/Dockerfile"
-      target = "runtime"
+      path         = "/jobs/cleanup/Dockerfile"
+      target       = "runtime"
+      storage_size = 16384 # 16 GB of disk per build
     }
   }
+
+  # Every push to main is built; "always" also runs the job on each new
+  # build, rather than only on its schedule or when started by hand.
+  run_on_source_change = "always"
 
   build_arguments = {
     NODE_ENV = "production"

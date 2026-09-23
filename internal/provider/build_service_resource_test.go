@@ -32,6 +32,7 @@ func dockerfileBuild(engine string, target *string) types.Object {
 			"target":       types.StringPointerValue(target),
 			"build_engine": types.StringValue(engine),
 			"use_cache":    types.BoolValue(true),
+			"storage_size": types.Int64Value(16384),
 		}),
 		"buildpack": types.ObjectNull(buildpackBuildAttrTypes),
 	})
@@ -220,6 +221,7 @@ func combinedServicePlan(t *testing.T) combinedServiceModel {
 				"build_context": types.StringValue("/web"),
 				"buildpacks":    types.ListValueMust(types.StringType, nil),
 				"use_cache":     types.BoolValue(false),
+				"storage_size":  types.Int64Null(),
 			}),
 		}),
 		BuildArguments:     types.MapNull(types.StringType),

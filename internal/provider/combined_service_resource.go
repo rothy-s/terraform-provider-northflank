@@ -506,7 +506,7 @@ func applyCombinedService(ctx context.Context, model *combinedServiceModel, serv
 	diags.Append(d...)
 	model.Repository = repository
 
-	build, d := buildSettingsValue(ctx, service)
+	build, d := buildSettingsValue(ctx, model.Build, service)
 	diags.Append(d...)
 	model.Build = build
 

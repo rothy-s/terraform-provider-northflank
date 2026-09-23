@@ -13,6 +13,7 @@ import (
 // Enumerations and constraints copied from the OpenAPI document.
 var (
 	jobConcurrencyPolicies = []string{"allow", "forbid", "replace"}
+	jobRunOnSourceChange   = []string{"never", "cd-promote", "always"}
 
 	// Job names follow the same rules as project names, but may be up to 52
 	// characters long.
@@ -23,6 +24,7 @@ var (
 
 const (
 	jobDefaultConcurrencyPolicy = "forbid"
+	jobDefaultRunOnSourceChange = "never"
 	jobDefaultBackoffLimit      = 0
 )
 
@@ -55,6 +57,7 @@ type jobBillingPayload struct {
 
 type jobSettingsPayload struct {
 	BackoffLimit          int             `json:"backoffLimit"`
+	RunOnSourceChange     string          `json:"runOnSourceChange,omitempty"`
 	ActiveDeadlineSeconds *int            `json:"activeDeadlineSeconds,omitempty"`
 	Cron                  *jobCronPayload `json:"cron,omitempty"`
 }

@@ -63,6 +63,7 @@ type jobResourceModel struct {
 	Deployment            types.Object `tfsdk:"deployment"`
 	Cron                  types.Object `tfsdk:"cron"`
 	BackoffLimit          types.Int64  `tfsdk:"backoff_limit"`
+	RunOnSourceChange     types.String `tfsdk:"run_on_source_change"`
 	ActiveDeadlineSeconds types.Int64  `tfsdk:"active_deadline_seconds"`
 	RuntimeEnvironment    types.Map    `tfsdk:"runtime_environment"`
 	Repository            types.Object `tfsdk:"repository"`
@@ -228,6 +229,19 @@ func (r *jobResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 							stringvalidator.OneOf(jobConcurrencyPolicies...),
 						},
 					},
+				},
+			},
+			"run_on_source_change": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  stringdefault.StaticString(jobDefaultRunOnSourceChange),
+				MarkdownDescription: "Whether a new build of the job's source starts a run: `never` (runs only " +
+					"start when triggered or scheduled), `always` (every new build, such as each push to the " +
+					"branch, also runs the job), or `cd-promote` (on promotion in a pipeline). Applies to jobs " +
+					"that build from Git or run a build service's output. Defaults to `never`. The API does not " +
+					"report it back, so a change made outside Terraform is not detected.",
+				Validators: []validator.String{
+					stringvalidator.OneOf(jobRunOnSourceChange...),
 				},
 			},
 			"backoff_limit": schema.Int64Attribute{
@@ -561,11 +575,14 @@ func jobPayloadFrom(ctx context.Context, plan *jobResourceModel) (*jobPayload, d
 	var diags diag.Diagnostics
 
 	payload := &jobPayload{
-		Name:               plan.Name.ValueString(),
-		Description:        knownStringPointer(plan.Description),
-		Tags:               stringsFromSet(ctx, plan.Tags, &diags),
-		Billing:            jobBillingPayload{DeploymentPlan: plan.DeploymentPlan.ValueString()},
-		Settings:           jobSettingsPayload{BackoffLimit: int(plan.BackoffLimit.ValueInt64())},
+		Name:        plan.Name.ValueString(),
+		Description: knownStringPointer(plan.Description),
+		Tags:        stringsFromSet(ctx, plan.Tags, &diags),
+		Billing:     jobBillingPayload{DeploymentPlan: plan.DeploymentPlan.ValueString()},
+		Settings: jobSettingsPayload{
+			BackoffLimit:      int(plan.BackoffLimit.ValueInt64()),
+			RunOnSourceChange: plan.RunOnSourceChange.ValueString(),
+		},
 		RuntimeEnvironment: map[string]string{},
 	}
 
@@ -639,6 +656,12 @@ func applyJob(ctx context.Context, model *jobResourceModel, job *jobView) diag.D
 	model.Description = types.StringPointerValue(job.Description)
 	model.DeploymentPlan = types.StringValue(job.DeploymentPlan)
 	model.BackoffLimit = types.Int64Value(int64(job.BackoffLimit))
+
+	// Not reported by the API. After an import, assume the API default, which
+	// the next apply corrects if the configuration says otherwise.
+	if model.RunOnSourceChange.IsNull() || model.RunOnSourceChange.IsUnknown() {
+		model.RunOnSourceChange = types.StringValue(jobDefaultRunOnSourceChange)
+	}
 	model.JobType = types.StringValue(job.JobType)
 	model.Suspended = types.BoolValue(job.Suspended)
 	model.CreatedAt = timeValue(job.CreatedAt)
@@ -702,7 +725,7 @@ func applyJobBuild(ctx context.Context, model *jobResourceModel, job *jobView) d
 	model.Repository = repository
 	model.Branch = types.StringPointerValue(job.Build.VcsData.ProjectBranch)
 
-	build, d := buildSettingsValue(ctx, job.Build)
+	build, d := buildSettingsValue(ctx, model.Build, job.Build)
 	diags.Append(d...)
 	model.Build = build
 

@@ -39,6 +39,10 @@ caveat that minor releases may still break.
   only needed for command and entrypoint overrides in that case. The
   `northflank_job` data source reports such a job's `repository_url` and
   `branch`.
+- `run_on_source_change` on `northflank_job`: `never` (default), `always` or
+  `cd-promote`, deciding whether a new build of the job's source also runs it.
+- `storage_size` in the `dockerfile` and `buildpack` build blocks of jobs,
+  build services and combined services: each build's ephemeral disk in MB.
 - `northflank_deployment_service` resource: a long-running service running an
   external image or the output of a build service, with instance count,
   command and entrypoint overrides, ports, health checks and a runtime

@@ -130,6 +130,7 @@ Optional:
 - `build_context` (String) Directory in the repository to build. Defaults to `/`.
 - `builder` (String) Buildpack stack. Defaults to `HEROKU_24`.
 - `buildpacks` (List of String) Custom buildpacks to use instead of the stack's defaults, in order.
+- `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `use_cache` (Boolean) Cache build dependencies between builds. Defaults to `false`.
 
 
@@ -140,6 +141,7 @@ Optional:
 
 - `build_engine` (String) `buildkit` or `kaniko`. Defaults to `buildkit`.
 - `path` (String) Path of the Dockerfile in the repository. Defaults to `/Dockerfile`.
+- `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `target` (String) Stage to build, for a multi-stage Dockerfile.
 - `use_cache` (Boolean) Keep build layers in persistent storage between builds. Only applies to the `buildkit` engine. Defaults to `false`.
 - `work_dir` (String) Build context directory in the repository. Defaults to `/`.
