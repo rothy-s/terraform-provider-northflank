@@ -186,6 +186,10 @@ func (p *northflankProvider) Resources(_ context.Context) []func() resource.Reso
 		NewCombinedServiceResource,
 		NewVolumeResource,
 		NewAddonResource,
+		NewDomainResource,
+		NewDomainVerificationResource,
+		NewSubdomainResource,
+		NewSubdomainVerificationResource,
 	}
 }
 
@@ -197,6 +201,7 @@ func (p *northflankProvider) DataSources(_ context.Context) []func() datasource.
 		NewServiceDataSource,
 		NewVolumeDataSource,
 		NewAddonDataSource,
+		NewDomainDataSource,
 	}
 }
 

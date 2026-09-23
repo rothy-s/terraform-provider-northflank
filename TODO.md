@@ -15,7 +15,7 @@
 * Provider Link?
 * Tags?
 * Cloud Providers?
-* Domains?
+* Domains (done: domain, subdomain and their verification)
 * Egress IPs?
 
 ## Project (pri 1)
@@ -31,3 +31,4 @@
 * Addon datasource (done)
 * Volume resource (done)
 * Volume datasource (done)
+* Blueprint for preview?

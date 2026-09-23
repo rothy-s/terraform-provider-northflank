@@ -65,6 +65,15 @@ caveat that minor releases may still break.
   `<project_id>/<addon_id>`.
 - `northflank_addon` data source: looks up an addon by `id` or `name` within
   a project, including its credentials.
+- `northflank_domain` and `northflank_subdomain` resources: register a root
+  domain and add subdomains to it, exposing the TXT and CNAME records to
+  create. Import as `<domain>` and `<domain>/<subdomain>`.
+- `northflank_domain_verification` and `northflank_subdomain_verification`
+  resources: retry verification until the DNS record has propagated or a
+  configurable timeout passes, so that a DNS provider can create the record
+  in the same apply.
+- `northflank_domain` data source: a registered domain's status,
+  verification record and subdomains.
 - `northflank_service` data source: looks up a service of any kind by `id` or
   `name` within a project, including its repository and branch.
 - Provider scaffold: `token` and `endpoint` configuration, also settable with

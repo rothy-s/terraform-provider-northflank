@@ -14,16 +14,20 @@ first resources and data sources on top of it. Behaviour is covered by unit
 tests, tests against a fake API server and an offline plan, but not yet by
 acceptance tests against the live API.
 
-| Resource                        | Update                                    |
-| ------------------------------- | ----------------------------------------- |
-| `northflank_project`            | `description`, `color`; others replace    |
-| `northflank_secret_group`       | all but `project_id` and `name`           |
-| `northflank_job`                | all but `project_id`, `name`, cron/manual |
-| `northflank_deployment_service` | all but `project_id` and `name`           |
-| `northflank_build_service`      | all but `project_id` and `name`           |
-| `northflank_combined_service`   | all but `project_id` and `name`           |
-| `northflank_volume`             | size, mounts, attachments; others replace |
-| `northflank_addon`              | all but `project_id`, `name`, `type`, `database_name` |
+| Resource                            | Update                                                |
+| ----------------------------------- | ----------------------------------------------------- |
+| `northflank_project`                | `description`, `color`; others replace                |
+| `northflank_secret_group`           | all but `project_id` and `name`                       |
+| `northflank_job`                    | all but `project_id`, `name`, cron/manual             |
+| `northflank_deployment_service`     | all but `project_id` and `name`                       |
+| `northflank_build_service`          | all but `project_id` and `name`                       |
+| `northflank_combined_service`       | all but `project_id` and `name`                       |
+| `northflank_volume`                 | size, mounts, attachments; others replace             |
+| `northflank_addon`                  | all but `project_id`, `name`, `type`, `database_name` |
+| `northflank_domain`                 | replace only                                          |
+| `northflank_domain_verification`    | replace only (`timeout` in place)                     |
+| `northflank_subdomain`              | replace only                                          |
+| `northflank_subdomain_verification` | replace only (`timeout` in place)                     |
 
 | Data source               | Lookup keys                     |
 | ------------------------- | ------------------------------- |
@@ -33,6 +37,7 @@ acceptance tests against the live API.
 | `northflank_service`      | `project_id` + (`id` or `name`) |
 | `northflank_volume`       | `project_id` + (`id` or `name`) |
 | `northflank_addon`        | `project_id` + (`id` or `name`) |
+| `northflank_domain`       | `domain`                        |
 
 A few things worth knowing about projects:
 
@@ -135,6 +140,20 @@ And about addons:
 - **Not supported yet:** backup schedules, IP policies, disk autoscaling,
   type-specific settings (such as PostgreSQL connection poolers or Redis
   Sentinel), forking from a backup, and secret rotation.
+
+And about domains:
+
+- **Verification is its own resource**, like `aws_acm_certificate_validation`.
+  `northflank_domain` and `northflank_subdomain` register and expose the DNS
+  record to create; `northflank_domain_verification` and
+  `northflank_subdomain_verification` then retry verification (for up to 20
+  minutes by default) until the record has propagated. That lets a DNS
+  provider create the record in the same apply.
+- **Routing stays on the service.** List a verified subdomain's `full_name`
+  in the service's `ports[].domains`; reading it from the verification
+  resource orders the apply correctly.
+- **Not supported yet:** wildcard certificates and certificate import,
+  wildcard redirects, CDN, path-based routing rules and geo-routing rules.
 
 ## Usage
 

@@ -274,3 +274,26 @@ data "northflank_addon" "by_id" {
   project_id = northflank_project.smoke.id
   id         = northflank_addon.db.id
 }
+
+resource "northflank_domain" "root" {
+  domain = "smoke-example.com"
+}
+
+resource "northflank_domain_verification" "root" {
+  domain  = northflank_domain.root.domain
+  timeout = "5m"
+}
+
+resource "northflank_subdomain" "api" {
+  domain = northflank_domain_verification.root.domain
+  name   = "api"
+}
+
+resource "northflank_subdomain_verification" "api" {
+  domain    = northflank_subdomain.api.domain
+  subdomain = northflank_subdomain.api.name
+}
+
+data "northflank_domain" "root" {
+  domain = northflank_domain_verification.root.domain
+}
