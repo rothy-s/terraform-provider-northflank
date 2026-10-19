@@ -81,6 +81,7 @@ resource "northflank_deployment_service" "api" {
 - `description` (String) Short description of the addon, up to 200 characters. Removing it from configuration keeps the current value.
 - `external_access` (Boolean) Make the addon reachable from the internet, over TLS. Cannot be combined with `vpc_accessible`. Defaults to `false`.
 - `replicas` (Number) Number of replicas to run. Defaults to `1`.
+- `stage_id` (String) ID of the project environment the addon belongs to. Environments are created in the Northflank dashboard. Changing this moves the addon. Left unset, a new addon goes in the default environment, and an existing one stays where it is; removing the attribute does not move it back.
 - `storage_class` (String) Storage class, such as `nvme`. Only configurable on accounts with the feature enabled; Northflank picks its default otherwise.
 - `tags` (Set of String) Previously defined Northflank tags to attach to the addon.
 - `tls_enabled` (Boolean) Serve connections over TLS, for types that support it. Defaults to `false`.

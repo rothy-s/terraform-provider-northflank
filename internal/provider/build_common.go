@@ -71,12 +71,13 @@ type buildSettingsModel struct {
 }
 
 type dockerfileBuildModel struct {
-	Path        types.String `tfsdk:"path"`
-	WorkDir     types.String `tfsdk:"work_dir"`
-	Target      types.String `tfsdk:"target"`
-	BuildEngine types.String `tfsdk:"build_engine"`
-	UseCache    types.Bool   `tfsdk:"use_cache"`
-	StorageSize types.Int64  `tfsdk:"storage_size"`
+	Path             types.String `tfsdk:"path"`
+	WorkDir          types.String `tfsdk:"work_dir"`
+	Target           types.String `tfsdk:"target"`
+	BuildEngine      types.String `tfsdk:"build_engine"`
+	UseCache         types.Bool   `tfsdk:"use_cache"`
+	CacheStorageSize types.Int64  `tfsdk:"cache_storage_size"`
+	StorageSize      types.Int64  `tfsdk:"storage_size"`
 }
 
 type buildpackBuildModel struct {
@@ -97,12 +98,13 @@ var (
 	}
 
 	dockerfileBuildAttrTypes = map[string]attr.Type{
-		"path":         types.StringType,
-		"work_dir":     types.StringType,
-		"target":       types.StringType,
-		"build_engine": types.StringType,
-		"use_cache":    types.BoolType,
-		"storage_size": types.Int64Type,
+		"path":               types.StringType,
+		"work_dir":           types.StringType,
+		"target":             types.StringType,
+		"build_engine":       types.StringType,
+		"use_cache":          types.BoolType,
+		"cache_storage_size": types.Int64Type,
+		"storage_size":       types.Int64Type,
 	}
 
 	buildpackBuildAttrTypes = map[string]attr.Type{
@@ -179,8 +181,23 @@ func storageSizeValue(reported *buildStoragePayload, prior types.Int64) types.In
 	return prior
 }
 
+// cacheStorageSizeValue reads the reported cache disk size, falling back to
+// the prior value when Northflank does not report one.
+func cacheStorageSizeValue(reported *buildkitSettingsPayload, prior types.Int64) types.Int64 {
+	if reported != nil && reported.CacheStorageSize != nil {
+		return types.Int64Value(*reported.CacheStorageSize)
+	}
+
+	if prior.IsUnknown() {
+		return types.Int64Null()
+	}
+
+	return prior
+}
+
 type buildkitSettingsPayload struct {
-	UseCache bool `json:"useCache"`
+	UseCache         bool   `json:"useCache"`
+	CacheStorageSize *int64 `json:"cacheStorageSize,omitempty"`
 }
 
 type buildpackSettingsPayload struct {
@@ -293,6 +310,21 @@ func buildSettingsAttribute() schema.SingleNestedAttribute {
 						Default:  booldefault.StaticBool(false),
 						MarkdownDescription: "Keep build layers in persistent storage between builds. Only applies " +
 							"to the `buildkit` engine. Defaults to `false`.",
+					},
+					"cache_storage_size": schema.Int64Attribute{
+						Optional: true,
+						Computed: true,
+						MarkdownDescription: "Persistent disk for the layer cache, in MB, such as `16384` (16 GB). It holds " +
+							"the cache and the running build's scratch space; Northflank prunes the cache at about 60% " +
+							"full. Builds that run in your own cluster need it for `use_cache`, and are rejected with " +
+							"\"Internal cache storage is required when using internal cache\" without it. Only applies " +
+							"to the `buildkit` engine.",
+						Validators: []validator.Int64{
+							int64validator.AtLeast(1),
+						},
+						PlanModifiers: []planmodifier.Int64{
+							int64planmodifier.UseStateForUnknown(),
+						},
 					},
 					"storage_size": buildStorageSizeAttribute(),
 				},
@@ -418,7 +450,10 @@ func buildSettingsPayloadFrom(ctx context.Context, value types.Object) (*buildSe
 
 		// The cache setting belongs to the buildkit engine only.
 		if payload.Dockerfile.BuildEngine == "buildkit" {
-			payload.Dockerfile.Buildkit = &buildkitSettingsPayload{UseCache: docker.UseCache.ValueBool()}
+			payload.Dockerfile.Buildkit = &buildkitSettingsPayload{
+				UseCache:         docker.UseCache.ValueBool(),
+				CacheStorageSize: knownInt64Pointer(docker.CacheStorageSize),
+			}
 		}
 
 		return payload, knownStringPointer(docker.Target), diags
@@ -517,7 +552,7 @@ func buildSettingsValue(ctx context.Context, prior types.Object, service *servic
 	buildpack := types.ObjectNull(buildpackBuildAttrTypes)
 
 	var priorSettings buildSettingsModel
-	priorDocker := dockerfileBuildModel{StorageSize: types.Int64Null()}
+	priorDocker := dockerfileBuildModel{CacheStorageSize: types.Int64Null(), StorageSize: types.Int64Null()}
 	priorPack := buildpackBuildModel{StorageSize: types.Int64Null()}
 
 	if !prior.IsNull() && !prior.IsUnknown() {
@@ -547,12 +582,13 @@ func buildSettingsValue(ctx context.Context, prior types.Object, service *servic
 		}
 
 		dockerfile = types.ObjectValueMust(dockerfileBuildAttrTypes, map[string]attr.Value{
-			"path":         types.StringValue(orDefault(d.DockerFilePath, defaultDockerfilePath)),
-			"work_dir":     types.StringValue(orDefault(d.DockerWorkDir, defaultDockerWorkDir)),
-			"target":       types.StringPointerValue(target),
-			"build_engine": types.StringValue(engine),
-			"use_cache":    types.BoolValue(d.Buildkit != nil && d.Buildkit.UseCache),
-			"storage_size": storageSizeValue(d.Storage, priorDocker.StorageSize),
+			"path":               types.StringValue(orDefault(d.DockerFilePath, defaultDockerfilePath)),
+			"work_dir":           types.StringValue(orDefault(d.DockerWorkDir, defaultDockerWorkDir)),
+			"target":             types.StringPointerValue(target),
+			"build_engine":       types.StringValue(engine),
+			"use_cache":          types.BoolValue(d.Buildkit != nil && d.Buildkit.UseCache),
+			"cache_storage_size": cacheStorageSizeValue(d.Buildkit, priorDocker.CacheStorageSize),
+			"storage_size":       storageSizeValue(d.Storage, priorDocker.StorageSize),
 		})
 	}
 

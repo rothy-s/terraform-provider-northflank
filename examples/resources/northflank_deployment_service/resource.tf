@@ -55,6 +55,8 @@ resource "northflank_deployment_service" "api" {
 # A private worker running the latest build of a Northflank build service.
 resource "northflank_deployment_service" "worker" {
   project_id      = northflank_project.app.id
+  stage_id        = "staging"
+  architecture    = "arm"
   name            = "Worker"
   deployment_plan = "nf-compute-10"
 

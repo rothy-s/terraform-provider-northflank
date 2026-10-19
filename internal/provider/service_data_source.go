@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
@@ -302,7 +303,7 @@ func serviceDataSourceModelFrom(ctx context.Context, projectID string, service *
 		}
 
 		if dep.Internal != nil {
-			model.BuildServiceID = types.StringValue(dep.Internal.ID)
+			model.BuildServiceID = types.StringValue(cmp.Or(dep.Internal.ID, dep.Internal.NfObjectID))
 		}
 	}
 

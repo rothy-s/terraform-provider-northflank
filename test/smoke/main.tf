@@ -72,6 +72,10 @@ resource "northflank_secret_group" "restricted" {
     DATABASE_URL = "postgres://placeholder"
   }
 
+  docker_secret_mounts = {
+    npmrc = "//registry.npmjs.org/:_authToken=placeholder"
+  }
+
   restrictions = {
     restricted          = true
     tags                = ["backend"]
@@ -110,6 +114,8 @@ resource "northflank_job" "cron" {
 
 resource "northflank_job" "manual" {
   project_id      = northflank_project.smoke.id
+  stage_id        = "staging"
+  architecture    = "arm"
   name            = "Smoke Manual"
   deployment_plan = "nf-compute-10"
 
@@ -178,6 +184,8 @@ resource "northflank_deployment_service" "web" {
 
 resource "northflank_deployment_service" "worker" {
   project_id      = northflank_project.smoke.id
+  stage_id        = "staging"
+  architecture    = "arm"
   name            = "Smoke Worker"
   deployment_plan = "nf-compute-10"
 
@@ -195,8 +203,10 @@ data "northflank_service" "by_id" {
 }
 
 resource "northflank_build_service" "builder" {
-  project_id = northflank_project.smoke.id
-  name       = "Smoke Builder"
+  project_id   = northflank_project.smoke.id
+  stage_id     = "staging"
+  architecture = "arm"
+  name         = "Smoke Builder"
 
   repository = {
     url      = "https://github.com/acme/smoke"
@@ -205,7 +215,9 @@ resource "northflank_build_service" "builder" {
 
   build = {
     dockerfile = {
-      target = "runtime"
+      target             = "runtime"
+      use_cache          = true
+      cache_storage_size = 16384
     }
   }
 
@@ -261,6 +273,7 @@ data "northflank_volume" "by_id" {
 
 resource "northflank_addon" "db" {
   project_id      = northflank_project.smoke.id
+  stage_id        = "staging"
   name            = "Smoke DB"
   type            = "postgresql"
   version         = "16"

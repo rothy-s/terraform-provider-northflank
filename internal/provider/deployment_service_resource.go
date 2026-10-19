@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,6 +50,8 @@ type deploymentServiceModel struct {
 	UID                types.String `tfsdk:"uid"`
 	AppID              types.String `tfsdk:"app_id"`
 	ProjectID          types.String `tfsdk:"project_id"`
+	StageID            types.String `tfsdk:"stage_id"`
+	Architecture       types.String `tfsdk:"architecture"`
 	Name               types.String `tfsdk:"name"`
 	Description        types.String `tfsdk:"description"`
 	Tags               types.Set    `tfsdk:"tags"`
@@ -66,6 +69,8 @@ type deploymentServiceModel struct {
 // which take the same schema.
 type deploymentServicePayload struct {
 	Name               string                      `json:"name"`
+	StageID            *string                     `json:"stageId,omitempty"`
+	Infrastructure     *infrastructurePayload      `json:"infrastructure,omitempty"`
 	Description        *string                     `json:"description,omitempty"`
 	Tags               []string                    `json:"tags"`
 	Billing            jobBillingPayload           `json:"billing"`
@@ -138,6 +143,8 @@ func (r *deploymentServiceResource) Schema(_ context.Context, _ resource.SchemaR
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"stage_id":     stageIDAttribute("service"),
+			"architecture": serviceArchitectureAttribute("service"),
 			"description": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
@@ -540,10 +547,12 @@ func deploymentServicePayloadFrom(ctx context.Context, plan *deploymentServiceMo
 	}
 
 	payload := &deploymentServicePayload{
-		Name:        plan.Name.ValueString(),
-		Description: knownStringPointer(plan.Description),
-		Tags:        stringsFromSet(ctx, plan.Tags, &diags),
-		Billing:     jobBillingPayload{DeploymentPlan: plan.DeploymentPlan.ValueString()},
+		Name:           plan.Name.ValueString(),
+		Description:    knownStringPointer(plan.Description),
+		StageID:        knownStringPointer(plan.StageID),
+		Infrastructure: infrastructurePayloadFrom(plan.Architecture),
+		Tags:           stringsFromSet(ctx, plan.Tags, &diags),
+		Billing:        jobBillingPayload{DeploymentPlan: plan.DeploymentPlan.ValueString()},
 		Deployment: serviceDeploymentPayload{
 			deploymentPayload: *deployment,
 			Instances:         int(plan.Instances.ValueInt64()),
@@ -570,6 +579,8 @@ func applyDeploymentService(ctx context.Context, model *deploymentServiceModel, 
 	model.AppID = types.StringValue(service.AppID)
 	model.Name = types.StringValue(service.Name)
 	model.Description = types.StringPointerValue(service.Description)
+	model.StageID = types.StringPointerValue(service.StageID)
+	model.Architecture = serviceArchitectureValue(service)
 	model.DeploymentPlan = types.StringValue(service.Billing.DeploymentPlan)
 	model.CreatedAt = timePointerValue(service.CreatedAt)
 
@@ -662,7 +673,7 @@ func serviceDeploymentValue(ctx context.Context, current types.Object, service *
 		}
 
 		build = types.ObjectValueMust(buildServiceAttrTypes, map[string]attr.Value{
-			"id":        types.StringValue(d.Internal.ID),
+			"id":        types.StringValue(cmp.Or(d.Internal.ID, d.Internal.NfObjectID)),
 			"branch":    types.StringPointerValue(d.Internal.Branch),
 			"build_sha": sha,
 		})

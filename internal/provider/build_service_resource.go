@@ -45,6 +45,8 @@ type buildServiceResourceModel struct {
 	UID                types.String `tfsdk:"uid"`
 	AppID              types.String `tfsdk:"app_id"`
 	ProjectID          types.String `tfsdk:"project_id"`
+	StageID            types.String `tfsdk:"stage_id"`
+	Architecture       types.String `tfsdk:"architecture"`
 	Name               types.String `tfsdk:"name"`
 	Description        types.String `tfsdk:"description"`
 	Tags               types.Set    `tfsdk:"tags"`
@@ -62,6 +64,8 @@ type buildServiceResourceModel struct {
 // take the same schema.
 type buildServiceRequestPayload struct {
 	Name               string                    `json:"name"`
+	StageID            *string                   `json:"stageId,omitempty"`
+	Infrastructure     *infrastructurePayload    `json:"infrastructure,omitempty"`
 	Description        *string                   `json:"description,omitempty"`
 	Tags               []string                  `json:"tags"`
 	Billing            buildBillingPayload       `json:"billing"`
@@ -131,6 +135,8 @@ func (r *buildServiceResource) Schema(_ context.Context, _ resource.SchemaReques
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"stage_id":     stageIDAttribute("build service"),
+			"architecture": serviceArchitectureAttribute("build service"),
 			"description": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
@@ -419,13 +425,15 @@ func buildServicePayloadFrom(ctx context.Context, plan *buildServiceResourceMode
 	pullRequests := stringsFromList(ctx, plan.PrRestrictions, &diags)
 
 	payload := &buildServiceRequestPayload{
-		Name:          plan.Name.ValueString(),
-		Description:   knownStringPointer(plan.Description),
-		Tags:          stringsFromSet(ctx, plan.Tags, &diags),
-		Billing:       buildBillingPayload{BuildPlan: knownStringPointer(plan.BuildPlan)},
-		VcsData:       *vcs,
-		BuildSource:   "git",
-		BuildSettings: *settings,
+		Name:           plan.Name.ValueString(),
+		Description:    knownStringPointer(plan.Description),
+		StageID:        knownStringPointer(plan.StageID),
+		Infrastructure: infrastructurePayloadFrom(plan.Architecture),
+		Tags:           stringsFromSet(ctx, plan.Tags, &diags),
+		Billing:        buildBillingPayload{BuildPlan: knownStringPointer(plan.BuildPlan)},
+		VcsData:        *vcs,
+		BuildSource:    "git",
+		BuildSettings:  *settings,
 		BuildConfiguration: buildConfigurationPayload{
 			DockerfileTarget:   target,
 			BranchRestrictions: &branches,
@@ -451,6 +459,8 @@ func applyBuildService(ctx context.Context, model *buildServiceResourceModel, se
 	model.AppID = types.StringValue(service.AppID)
 	model.Name = types.StringValue(service.Name)
 	model.Description = types.StringPointerValue(service.Description)
+	model.StageID = types.StringPointerValue(service.StageID)
+	model.Architecture = serviceArchitectureValue(service)
 	model.BuildPlan = types.StringPointerValue(service.Billing.BuildPlan)
 	model.DisableCI = types.BoolValue(service.DisabledCI)
 	model.CreatedAt = timePointerValue(service.CreatedAt)
