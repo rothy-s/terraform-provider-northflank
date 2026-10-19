@@ -92,6 +92,7 @@ resource "northflank_combined_service" "web" {
 
 ### Optional
 
+- `architecture` (String) CPU architecture of the service's infrastructure, `arm` or `x86`. For a build service this is the architecture of the images it builds; for a deployment it is the architecture of the nodes it runs on. Left unset, Northflank uses `x86`. Northflank cannot change it, so changing it forces a new service; removing the attribute keeps the current value.
 - `autoscaling` (Attributes) Scale the number of instances between `min_replicas` and `max_replicas` based on load. Set at least one trigger; the service scales up when any of them is exceeded. Leave the block out to run a fixed number of `instances`.
 
 While autoscaling is on, the autoscaler owns the instance count, so `instances` is not read back. (see [below for nested schema](#nestedatt--autoscaling))
@@ -105,6 +106,7 @@ While autoscaling is on, the autoscaler owns the instance count, so `instances` 
 - `instances` (Number) Number of instances to run. `0` scales the service down without deleting it. Defaults to `1`.
 - `ports` (Attributes List) Ports the service listens on, and whether each is reachable from the internet. (see [below for nested schema](#nestedatt--ports))
 - `runtime_environment` (Map of String, Sensitive) Environment variables set on every instance, as a map of name to value. Values shared by several services belong in a `northflank_secret_group`.
+- `stage_id` (String) ID of the project environment the service belongs to. Environments are created in the Northflank dashboard. Changing this moves the service. Left unset, a new service goes in the default environment, and an existing one stays where it is; removing the attribute does not move it back.
 - `tags` (Set of String) Previously defined Northflank tags to attach to the service.
 
 ### Read-Only
@@ -140,6 +142,7 @@ Optional:
 Optional:
 
 - `build_engine` (String) `buildkit` or `kaniko`. Defaults to `buildkit`.
+- `cache_storage_size` (Number) Persistent disk for the layer cache, in MB, such as `16384` (16 GB). It holds the cache and the running build's scratch space; Northflank prunes the cache at about 60% full. Builds that run in your own cluster need it for `use_cache`, and are rejected with "Internal cache storage is required when using internal cache" without it. Only applies to the `buildkit` engine.
 - `path` (String) Path of the Dockerfile in the repository. Defaults to `/Dockerfile`.
 - `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `target` (String) Stage to build, for a multi-stage Dockerfile.

@@ -56,6 +56,8 @@ type jobResourceModel struct {
 	UID                   types.String `tfsdk:"uid"`
 	AppID                 types.String `tfsdk:"app_id"`
 	ProjectID             types.String `tfsdk:"project_id"`
+	StageID               types.String `tfsdk:"stage_id"`
+	Architecture          types.String `tfsdk:"architecture"`
 	Name                  types.String `tfsdk:"name"`
 	Description           types.String `tfsdk:"description"`
 	Tags                  types.Set    `tfsdk:"tags"`
@@ -141,6 +143,8 @@ func (r *jobResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"stage_id":     stageIDAttribute("job"),
+			"architecture": jobArchitectureAttribute(),
 			"description": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
@@ -525,6 +529,13 @@ func (r *jobResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 		return northflank.CheckResponse(deleted)
 	})
 
+	if err == nil {
+		err = waitForDeleted(ctx, "job", jobID, func(ctx context.Context) error {
+			_, err := getJob(ctx, r.client, projectID, jobID)
+			return err
+		})
+	}
+
 	if err == nil || isNotFound(err) {
 		// Gone either way, which is the desired end state.
 		return
@@ -575,10 +586,12 @@ func jobPayloadFrom(ctx context.Context, plan *jobResourceModel) (*jobPayload, d
 	var diags diag.Diagnostics
 
 	payload := &jobPayload{
-		Name:        plan.Name.ValueString(),
-		Description: knownStringPointer(plan.Description),
-		Tags:        stringsFromSet(ctx, plan.Tags, &diags),
-		Billing:     jobBillingPayload{DeploymentPlan: plan.DeploymentPlan.ValueString()},
+		Name:           plan.Name.ValueString(),
+		Description:    knownStringPointer(plan.Description),
+		StageID:        knownStringPointer(plan.StageID),
+		Infrastructure: infrastructurePayloadFrom(plan.Architecture),
+		Tags:           stringsFromSet(ctx, plan.Tags, &diags),
+		Billing:        jobBillingPayload{DeploymentPlan: plan.DeploymentPlan.ValueString()},
 		Settings: jobSettingsPayload{
 			BackoffLimit:      int(plan.BackoffLimit.ValueInt64()),
 			RunOnSourceChange: plan.RunOnSourceChange.ValueString(),
@@ -654,6 +667,7 @@ func applyJob(ctx context.Context, model *jobResourceModel, job *jobView) diag.D
 	model.ProjectID = types.StringValue(job.ProjectID)
 	model.Name = types.StringValue(job.Name)
 	model.Description = types.StringPointerValue(job.Description)
+	model.StageID = types.StringPointerValue(job.StageID)
 	model.DeploymentPlan = types.StringValue(job.DeploymentPlan)
 	model.BackoffLimit = types.Int64Value(int64(job.BackoffLimit))
 

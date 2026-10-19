@@ -32,13 +32,15 @@ const (
 // take the same schema. It is hand-written for the same reason as the secret
 // group payload, and a test checks it against the generated types.
 type jobPayload struct {
-	Name               string             `json:"name"`
-	Description        *string            `json:"description,omitempty"`
-	Tags               []string           `json:"tags"`
-	Billing            jobBillingPayload  `json:"billing"`
-	Deployment         deploymentPayload  `json:"deployment"`
-	Settings           jobSettingsPayload `json:"settings"`
-	RuntimeEnvironment map[string]string  `json:"runtimeEnvironment"`
+	Name               string                 `json:"name"`
+	StageID            *string                `json:"stageId,omitempty"`
+	Infrastructure     *infrastructurePayload `json:"infrastructure,omitempty"`
+	Description        *string                `json:"description,omitempty"`
+	Tags               []string               `json:"tags"`
+	Billing            jobBillingPayload      `json:"billing"`
+	Deployment         deploymentPayload      `json:"deployment"`
+	Settings           jobSettingsPayload     `json:"settings"`
+	RuntimeEnvironment map[string]string      `json:"runtimeEnvironment"`
 
 	// Only for a job that builds from Git; the repository itself goes in
 	// deployment.vcs.
@@ -81,6 +83,7 @@ type jobView struct {
 	ProjectID             string
 	Name                  string
 	Description           *string
+	StageID               *string
 	Tags                  []string
 	JobType               string
 	DeploymentPlan        string
@@ -154,6 +157,7 @@ func jobFromGet(got *northflank.GetProjectsJobsJobidHTTPResponse) (*jobView, err
 		ProjectID:             data.ProjectId,
 		Name:                  data.Name,
 		Description:           data.Description,
+		StageID:               data.StageId,
 		Tags:                  data.Tags,
 		JobType:               string(data.JobType),
 		DeploymentPlan:        data.Billing.DeploymentPlan,

@@ -445,3 +445,13 @@ func knownStringPointer(v types.String) *string {
 
 	return v.ValueStringPointer()
 }
+
+// knownInt64Pointer returns the value of an integer that is set and known, and
+// nil for null or unknown.
+func knownInt64Pointer(v types.Int64) *int64 {
+	if v.IsNull() || v.IsUnknown() {
+		return nil
+	}
+
+	return v.ValueInt64Pointer()
+}

@@ -27,12 +27,13 @@ func repositoryObject(accountLogin *string) types.Object {
 func dockerfileBuild(engine string, target *string) types.Object {
 	return types.ObjectValueMust(buildSettingsAttrTypes, map[string]attr.Value{
 		"dockerfile": types.ObjectValueMust(dockerfileBuildAttrTypes, map[string]attr.Value{
-			"path":         types.StringValue("/docker/Dockerfile"),
-			"work_dir":     types.StringValue("/"),
-			"target":       types.StringPointerValue(target),
-			"build_engine": types.StringValue(engine),
-			"use_cache":    types.BoolValue(true),
-			"storage_size": types.Int64Value(16384),
+			"path":               types.StringValue("/docker/Dockerfile"),
+			"work_dir":           types.StringValue("/"),
+			"target":             types.StringPointerValue(target),
+			"build_engine":       types.StringValue(engine),
+			"use_cache":          types.BoolValue(true),
+			"cache_storage_size": types.Int64Value(32768),
+			"storage_size":       types.Int64Value(16384),
 		}),
 		"buildpack": types.ObjectNull(buildpackBuildAttrTypes),
 	})
@@ -130,6 +131,24 @@ func TestBuildSettingsCacheOnlyForBuildkit(t *testing.T) {
 
 	if settings.Dockerfile.Buildkit == nil || !settings.Dockerfile.Buildkit.UseCache {
 		t.Errorf("buildkit = %+v, want useCache sent", settings.Dockerfile.Buildkit)
+	}
+
+	if size := settings.Dockerfile.Buildkit.CacheStorageSize; size == nil || *size != 32768 {
+		t.Errorf("buildkit.cacheStorageSize = %v, want 32768", size)
+	}
+}
+
+func TestCacheStorageSizeUnset(t *testing.T) {
+	if p := (&buildkitSettingsPayload{UseCache: true, CacheStorageSize: knownInt64Pointer(types.Int64Null())}); p.CacheStorageSize != nil {
+		t.Errorf("cacheStorageSize = %v, want it omitted", *p.CacheStorageSize)
+	}
+
+	if got := cacheStorageSizeValue(nil, types.Int64Value(16384)); !got.Equal(types.Int64Value(16384)) {
+		t.Errorf("cacheStorageSizeValue(nil, 16384) = %v, want the prior value", got)
+	}
+
+	if got := cacheStorageSizeValue(&buildkitSettingsPayload{}, types.Int64Unknown()); !got.IsNull() {
+		t.Errorf("cacheStorageSizeValue(none, unknown) = %v, want null", got)
 	}
 }
 

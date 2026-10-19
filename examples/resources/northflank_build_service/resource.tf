@@ -6,8 +6,9 @@ resource "northflank_project" "app" {
 # Builds main and release branches, plus pull requests from feature branches.
 # The repository must be reachable through a Git account linked to the team.
 resource "northflank_build_service" "api" {
-  project_id = northflank_project.app.id
-  name       = "API Builder"
+  project_id   = northflank_project.app.id
+  name         = "API Builder"
+  architecture = "arm"
 
   repository = {
     url      = "https://github.com/acme/api"
@@ -16,9 +17,10 @@ resource "northflank_build_service" "api" {
 
   build = {
     dockerfile = {
-      path      = "/Dockerfile"
-      work_dir  = "/"
-      use_cache = true
+      path               = "/Dockerfile"
+      work_dir           = "/"
+      use_cache          = true
+      cache_storage_size = 16384
     }
   }
 
@@ -35,6 +37,7 @@ resource "northflank_deployment_service" "api" {
   project_id      = northflank_project.app.id
   name            = "API"
   deployment_plan = "nf-compute-20"
+  architecture    = "arm"
 
   deployment = {
     build_service = {

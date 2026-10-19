@@ -50,14 +50,22 @@ A few things worth knowing about projects:
   deleted with it.
 - **`color` drift is not detected.** The API accepts a color but does not
   report it when reading a project.
+- **Environments are created in the dashboard.** Addons, services and jobs
+  take a `stage_id` (the API's name for a project environment) to go in one;
+  changing it moves them. Secret groups have no environment of their own:
+  Northflank ignores a `stageId` sent for one, so `restrictions.stage_ids`
+  limits one to environments instead.
 
 And about secret groups:
 
 - **Variable values are stored in Terraform state.** Treat state as a secret.
 - **Only the group's own variables are managed.** Values inherited from linked
   addons are never read into state.
-- **Files and docker secret mounts are not supported yet**, nor are addon
-  links.
+- **Docker secret mounts are write-only.** `docker_secret_mounts` sets build
+  secrets read with `RUN --mount=type=secret`. Northflank never reports them,
+  so changes made outside Terraform are not detected. Leaving the attribute
+  out keeps mounts managed elsewhere; removing it deletes the ones it set.
+- **Files are not supported yet**, nor are addon links.
 
 And about jobs:
 
@@ -80,6 +88,9 @@ And about jobs:
   scheduled), `always`, or `cd-promote`. The API does not report it back.
 - **`storage_size`** in a `dockerfile` or `buildpack` block sets each build's
   ephemeral disk in MB, on jobs, build services and combined services alike.
+- **`architecture` is write-only on jobs**, since the API does not report it
+  for a job. As on services, Northflank cannot change it, so a change replaces
+  the job.
 - **Not supported yet:** health checks, GPUs and secret files.
 
 And about services:
@@ -105,6 +116,16 @@ And about services:
   provider does not manage.
 - **A combined service redeploys on every push** to its branch unless
   `disable_ci` is set, independently of Terraform.
+- **`architecture`** (`arm` or `x86`, Northflank's default) is the
+  architecture a build service builds for and a deployment runs on.
+  Northflank cannot change it after creation, so a change replaces the
+  service.
+- **The build cache needs a disk in your own cluster.** With `use_cache`, a
+  `dockerfile` build that runs in a BYOC cluster needs `cache_storage_size`
+  (MB); Northflank rejects it otherwise.
+- **Destroy waits until the service or job is gone.** Northflank deletes them
+  in the background for minutes, and the name stays taken until then, so a
+  replacement would otherwise fail with "already exists".
 - **Destroying a service keeps its volumes.** Volumes are managed separately,
   by `northflank_volume`, so the provider never asks Northflank to delete them
   along with a service.

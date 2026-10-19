@@ -115,6 +115,7 @@ resource "northflank_job" "cleanup" {
 ### Optional
 
 - `active_deadline_seconds` (Number) Longest a run may take, in seconds, before it is marked as failed. Northflank applies its own limit when this is not set.
+- `architecture` (String) CPU architecture of the nodes the job runs on, `arm` or `x86`. Left unset, Northflank uses its default. The API does not report this setting for a job, so a change made outside Terraform is not detected. Northflank cannot change it, so changing it forces a new job.
 - `backoff_limit` (Number) Number of times a failed run is retried before it is marked as failed. Defaults to `0`.
 - `branch` (String) Branch of `repository` to build and run.
 - `build` (Attributes) How to build `repository`. Set exactly one of `dockerfile` or `buildpack`. (see [below for nested schema](#nestedatt--build))
@@ -129,6 +130,7 @@ The API does not report the image or build service back, so a change made outsid
 - `repository` (Attributes) Build the job from this Git repository, like a combined service, instead of running an image or a build service's output. Requires `branch` and `build`. (see [below for nested schema](#nestedatt--repository))
 - `run_on_source_change` (String) Whether a new build of the job's source starts a run: `never` (runs only start when triggered or scheduled), `always` (every new build, such as each push to the branch, also runs the job), or `cd-promote` (on promotion in a pipeline). Applies to jobs that build from Git or run a build service's output. Defaults to `never`. The API does not report it back, so a change made outside Terraform is not detected.
 - `runtime_environment` (Map of String, Sensitive) Environment variables set on every run, as a map of name to value. The API does not report these back, so a change made outside Terraform is not detected. Values shared by several jobs or services belong in a `northflank_secret_group`.
+- `stage_id` (String) ID of the project environment the job belongs to. Environments are created in the Northflank dashboard. Changing this moves the job. Left unset, a new job goes in the default environment, and an existing one stays where it is; removing the attribute does not move it back.
 - `tags` (Set of String) Previously defined Northflank tags to attach to the job.
 
 ### Read-Only
@@ -166,6 +168,7 @@ Optional:
 Optional:
 
 - `build_engine` (String) `buildkit` or `kaniko`. Defaults to `buildkit`.
+- `cache_storage_size` (Number) Persistent disk for the layer cache, in MB, such as `16384` (16 GB). It holds the cache and the running build's scratch space; Northflank prunes the cache at about 60% full. Builds that run in your own cluster need it for `use_cache`, and are rejected with "Internal cache storage is required when using internal cache" without it. Only applies to the `buildkit` engine.
 - `path` (String) Path of the Dockerfile in the repository. Defaults to `/Dockerfile`.
 - `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `target` (String) Stage to build, for a multi-stage Dockerfile.

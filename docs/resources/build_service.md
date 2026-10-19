@@ -24,8 +24,9 @@ resource "northflank_project" "app" {
 # Builds main and release branches, plus pull requests from feature branches.
 # The repository must be reachable through a Git account linked to the team.
 resource "northflank_build_service" "api" {
-  project_id = northflank_project.app.id
-  name       = "API Builder"
+  project_id   = northflank_project.app.id
+  name         = "API Builder"
+  architecture = "arm"
 
   repository = {
     url      = "https://github.com/acme/api"
@@ -34,9 +35,10 @@ resource "northflank_build_service" "api" {
 
   build = {
     dockerfile = {
-      path      = "/Dockerfile"
-      work_dir  = "/"
-      use_cache = true
+      path               = "/Dockerfile"
+      work_dir           = "/"
+      use_cache          = true
+      cache_storage_size = 16384
     }
   }
 
@@ -53,6 +55,7 @@ resource "northflank_deployment_service" "api" {
   project_id      = northflank_project.app.id
   name            = "API"
   deployment_plan = "nf-compute-20"
+  architecture    = "arm"
 
   deployment = {
     build_service = {
@@ -79,12 +82,14 @@ resource "northflank_deployment_service" "api" {
 
 ### Optional
 
+- `architecture` (String) CPU architecture of the build service's infrastructure, `arm` or `x86`. For a build service this is the architecture of the images it builds; for a deployment it is the architecture of the nodes it runs on. Left unset, Northflank uses `x86`. Northflank cannot change it, so changing it forces a new build service; removing the attribute keeps the current value.
 - `branch_restrictions` (List of String) Branches whose commits are built automatically, such as `main` or `release/*`. Empty builds no branches automatically.
 - `build_arguments` (Map of String, Sensitive) Build arguments passed to every build, as a map of name to value. Values shared by several services belong in a `northflank_secret_group` with `secret_type` set to `arguments`.
 - `build_plan` (String) ID of the compute plan builds run on, such as `nf-compute-200`. Northflank picks one when this is not set.
 - `description` (String) Short description of the service, up to 200 characters. Removing it from configuration keeps the current value.
 - `disable_ci` (Boolean) Stop building new commits automatically; builds then only start when triggered. Defaults to `false`.
 - `pr_restrictions` (List of String) Branches whose pull requests are built automatically, such as `feature/*`. Empty builds no pull requests automatically.
+- `stage_id` (String) ID of the project environment the build service belongs to. Environments are created in the Northflank dashboard. Changing this moves the build service. Left unset, a new build service goes in the default environment, and an existing one stays where it is; removing the attribute does not move it back.
 - `tags` (Set of String) Previously defined Northflank tags to attach to the service.
 
 ### Read-Only
@@ -120,6 +125,7 @@ Optional:
 Optional:
 
 - `build_engine` (String) `buildkit` or `kaniko`. Defaults to `buildkit`.
+- `cache_storage_size` (Number) Persistent disk for the layer cache, in MB, such as `16384` (16 GB). It holds the cache and the running build's scratch space; Northflank prunes the cache at about 60% full. Builds that run in your own cluster need it for `use_cache`, and are rejected with "Internal cache storage is required when using internal cache" without it. Only applies to the `buildkit` engine.
 - `path` (String) Path of the Dockerfile in the repository. Defaults to `/Dockerfile`.
 - `storage_size` (Number) Ephemeral disk for each build, in MB: `16384` (16 GB), `32768`, `65536`, `131072`, `262144` or `524288`. Northflank picks its default when this is not set; which sizes are available may depend on the plan.
 - `target` (String) Stage to build, for a multi-stage Dockerfile.

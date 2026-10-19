@@ -54,6 +54,29 @@ resource "northflank_secret_group" "api" {
   }
 }
 
+# Read in the Dockerfile with RUN --mount=type=secret,id=npmrc.
+resource "northflank_secret_group" "build" {
+  project_id  = northflank_project.app.id
+  name        = "Build Secrets"
+  secret_type = "arguments"
+
+  docker_secret_mounts = {
+    npmrc = var.npmrc
+  }
+
+  restrictions = {
+    restricted = true
+    resources = [
+      { id = "api-builder", type = "service" },
+    ]
+  }
+}
+
+variable "npmrc" {
+  type      = string
+  sensitive = true
+}
+
 variable "database_url" {
   type      = string
   sensitive = true
@@ -71,6 +94,7 @@ variable "database_url" {
 ### Optional
 
 - `description` (String) Short description of the secret group, up to 200 characters. Removing it from configuration keeps the current value, since the API cannot clear it.
+- `docker_secret_mounts` (Map of String, Sensitive) Docker secret mounts for builds, as a map of mount ID to content, read in a Dockerfile with `RUN --mount=type=secret,id=<mount ID>`. Values are encrypted at rest by Northflank, but also stored in Terraform state. Northflank never reports mounts back, so changes made outside Terraform are not detected, and an imported secret group has none until they are configured. Leave out to keep mounts managed elsewhere; removing the attribute deletes the mounts it set.
 - `priority` (Number) Priority, from 0 to 100, used to merge secret groups that define the same key: the higher priority wins. Defaults to `10`.
 - `restrictions` (Attributes) Limits which resources inherit the secret group. Leave out to make it available to every service and job in the project. (see [below for nested schema](#nestedatt--restrictions))
 - `secret_type` (String) Where the variables are injected: `environment-arguments` for both runtime environment variables and build arguments, `environment` for runtime only, or `arguments` for build arguments only. Defaults to `environment-arguments`.

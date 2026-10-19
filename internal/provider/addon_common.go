@@ -42,6 +42,7 @@ type addonRead struct {
 	AppID       string    `json:"appId"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description"`
+	StageID     *string   `json:"stageId"`
 	Tags        []string  `json:"tags"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -77,6 +78,7 @@ type addonCredentials struct {
 
 type addonCreatePayload struct {
 	Name                  string                  `json:"name"`
+	StageID               *string                 `json:"stageId,omitempty"`
 	Description           *string                 `json:"description,omitempty"`
 	Tags                  []string                `json:"tags"`
 	Type                  string                  `json:"type"`
@@ -102,6 +104,7 @@ type addonCredentialPayload struct {
 // addonPatchPayload carries only what changed, so that an update touches as
 // little of a running database as possible.
 type addonPatchPayload struct {
+	StageID               *string                   `json:"stageId,omitempty"`
 	Description           *string                   `json:"description,omitempty"`
 	Tags                  *[]string                 `json:"tags,omitempty"`
 	Version               *string                   `json:"version,omitempty"`

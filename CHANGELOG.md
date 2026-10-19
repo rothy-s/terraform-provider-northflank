@@ -18,9 +18,36 @@ caveat that minor releases may still break.
 - `disable_nf_domain` on service ports, to stop routing the default `code.run`
   domain of a public HTTP port that has custom domains. The service data
   source reports it too.
+- `stage_id` on addons, build, combined and deployment services and jobs, to
+  put them in one of a project's environments. Changing it moves the
+  resource; left unset, a resource stays where it is. Secret groups have no
+  environment of their own (Northflank ignores a `stageId` sent for one); use
+  `restrictions.stage_ids` to limit one to environments.
+- `docker_secret_mounts` on secret groups, for build secrets read with
+  `RUN --mount=type=secret`. Northflank does not report mounts back, so
+  changes made outside Terraform are not detected.
+- `cache_storage_size` on Dockerfile builds (build, combined services and
+  jobs): the persistent disk for the buildkit layer cache, in MB. Builds that
+  run in your own cluster need it for `use_cache`; without it Northflank
+  rejects the service with "Internal cache storage is required when using
+  internal cache".
+- `architecture` (`arm` or `x86`) on build, combined and deployment services
+  and jobs, to build arm images and run on arm nodes. Northflank defaults to
+  `x86`. Northflank cannot change it after creation, so changing it replaces
+  the resource. It does not report the setting for a job, so a job's value is
+  not checked against Northflank.
 
 ### Fixed
 
+- A deployment service built by a Northflank build service read its
+  `deployment.build_service.id` back as `""`, so every plan wanted to change it
+  and the apply failed with an inconsistent result. Northflank reports the ID
+  as `nfObjectId` rather than the documented `id`; both are read now. The
+  service data source had the same problem with `build_service_id`.
+- Replacing a service or job failed with "Service already exists": Northflank
+  removes a deleted service or job minutes after accepting the delete, and
+  the name stays taken until then. Deleting now waits until it is gone, as
+  it already did for addons.
 - Domain verification failed with "HTTP 404: Could not verify TXT record" for
   a domain below the DNS zone, such as `lab.example.com` in `example.com`.
   `verification_record_name` was the name relative to the domain

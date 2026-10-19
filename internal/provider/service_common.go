@@ -38,11 +38,15 @@ const serviceDefaultInstances = 1
 // body is decoded into this struct instead; a test checks it against a
 // response in the documented shape.
 type serviceRead struct {
-	ID          string     `json:"id"`
-	UID         string     `json:"uid"`
-	AppID       string     `json:"appId"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
+	ID             string  `json:"id"`
+	UID            string  `json:"uid"`
+	AppID          string  `json:"appId"`
+	Name           string  `json:"name"`
+	Description    *string `json:"description"`
+	StageID        *string `json:"stageId"`
+	Infrastructure *struct {
+		Architecture string `json:"architecture"`
+	} `json:"infrastructure"`
 	Tags        []string   `json:"tags"`
 	ServiceType string     `json:"serviceType"`
 	CreatedAt   *time.Time `json:"createdAt"`
@@ -64,13 +68,11 @@ type serviceRead struct {
 	} `json:"vcsData"`
 	BuildSettings *struct {
 		Dockerfile *struct {
-			BuildEngine    string `json:"buildEngine"`
-			DockerFilePath string `json:"dockerFilePath"`
-			DockerWorkDir  string `json:"dockerWorkDir"`
-			Buildkit       *struct {
-				UseCache bool `json:"useCache"`
-			} `json:"buildkit"`
-			Storage *buildStoragePayload `json:"storage"`
+			BuildEngine    string                   `json:"buildEngine"`
+			DockerFilePath string                   `json:"dockerFilePath"`
+			DockerWorkDir  string                   `json:"dockerWorkDir"`
+			Buildkit       *buildkitSettingsPayload `json:"buildkit"`
+			Storage        *buildStoragePayload     `json:"storage"`
 		} `json:"dockerfile"`
 		Buildpack *struct {
 			Builder           string               `json:"builder"`
@@ -95,9 +97,12 @@ type serviceRead struct {
 			Credentials *string `json:"credentials"`
 		} `json:"external"`
 		Internal *struct {
-			ID       string  `json:"id"`
-			Branch   *string `json:"branch"`
-			BuildSHA *string `json:"buildSHA"`
+			ID string `json:"id"`
+			// The spec documents id, but the API reports the build service
+			// as nfObjectId.
+			NfObjectID string  `json:"nfObjectId"`
+			Branch     *string `json:"branch"`
+			BuildSHA   *string `json:"buildSHA"`
 		} `json:"internal"`
 		Docker *struct {
 			ConfigType       string  `json:"configType"`
@@ -550,7 +555,14 @@ func deleteService(ctx context.Context, client *northflank.ClientWithResponses, 
 		return nil
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	return waitForDeleted(ctx, "service", serviceID, func(ctx context.Context) error {
+		_, err := getService(ctx, client, projectID, serviceID)
+		return err
+	})
 }
 
 // checkServiceKind reports an error for a service of another kind, which a

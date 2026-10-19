@@ -46,6 +46,8 @@ type combinedServiceModel struct {
 	UID                types.String `tfsdk:"uid"`
 	AppID              types.String `tfsdk:"app_id"`
 	ProjectID          types.String `tfsdk:"project_id"`
+	StageID            types.String `tfsdk:"stage_id"`
+	Architecture       types.String `tfsdk:"architecture"`
 	Name               types.String `tfsdk:"name"`
 	Description        types.String `tfsdk:"description"`
 	Tags               types.Set    `tfsdk:"tags"`
@@ -70,6 +72,8 @@ type combinedServiceModel struct {
 // which take the same schema.
 type combinedServicePayload struct {
 	Name               string                      `json:"name"`
+	StageID            *string                     `json:"stageId,omitempty"`
+	Infrastructure     *infrastructurePayload      `json:"infrastructure,omitempty"`
 	Description        *string                     `json:"description,omitempty"`
 	Tags               []string                    `json:"tags"`
 	Billing            buildBillingPayload         `json:"billing"`
@@ -152,6 +156,8 @@ func (r *combinedServiceResource) Schema(ctx context.Context, _ resource.SchemaR
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"stage_id":     stageIDAttribute("service"),
+			"architecture": serviceArchitectureAttribute("service"),
 			"description": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
@@ -436,9 +442,11 @@ func combinedServicePayloadFrom(ctx context.Context, plan *combinedServiceModel)
 	deploymentPlan := plan.DeploymentPlan.ValueString()
 
 	payload := &combinedServicePayload{
-		Name:        plan.Name.ValueString(),
-		Description: knownStringPointer(plan.Description),
-		Tags:        stringsFromSet(ctx, plan.Tags, &diags),
+		Name:           plan.Name.ValueString(),
+		Description:    knownStringPointer(plan.Description),
+		StageID:        knownStringPointer(plan.StageID),
+		Infrastructure: infrastructurePayloadFrom(plan.Architecture),
+		Tags:           stringsFromSet(ctx, plan.Tags, &diags),
 		Billing: buildBillingPayload{
 			DeploymentPlan: &deploymentPlan,
 			BuildPlan:      knownStringPointer(plan.BuildPlan),
@@ -479,6 +487,8 @@ func applyCombinedService(ctx context.Context, model *combinedServiceModel, serv
 	model.AppID = types.StringValue(service.AppID)
 	model.Name = types.StringValue(service.Name)
 	model.Description = types.StringPointerValue(service.Description)
+	model.StageID = types.StringPointerValue(service.StageID)
+	model.Architecture = serviceArchitectureValue(service)
 	model.DeploymentPlan = types.StringValue(service.Billing.DeploymentPlan)
 	model.BuildPlan = types.StringPointerValue(service.Billing.BuildPlan)
 	model.DisableCI = types.BoolValue(service.DisabledCI)

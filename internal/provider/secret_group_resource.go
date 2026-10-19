@@ -48,18 +48,19 @@ func NewSecretGroupResource() resource.Resource {
 
 // secretGroupResourceModel maps the northflank_secret_group schema.
 type secretGroupResourceModel struct {
-	ID           types.String `tfsdk:"id"`
-	ProjectID    types.String `tfsdk:"project_id"`
-	Name         types.String `tfsdk:"name"`
-	Description  types.String `tfsdk:"description"`
-	Priority     types.Int64  `tfsdk:"priority"`
-	SecretType   types.String `tfsdk:"secret_type"`
-	Type         types.String `tfsdk:"type"`
-	Tags         types.Set    `tfsdk:"tags"`
-	Restrictions types.Object `tfsdk:"restrictions"`
-	Variables    types.Map    `tfsdk:"variables"`
-	CreatedAt    types.String `tfsdk:"created_at"`
-	UpdatedAt    types.String `tfsdk:"updated_at"`
+	ID                 types.String `tfsdk:"id"`
+	ProjectID          types.String `tfsdk:"project_id"`
+	Name               types.String `tfsdk:"name"`
+	Description        types.String `tfsdk:"description"`
+	Priority           types.Int64  `tfsdk:"priority"`
+	SecretType         types.String `tfsdk:"secret_type"`
+	Type               types.String `tfsdk:"type"`
+	Tags               types.Set    `tfsdk:"tags"`
+	Restrictions       types.Object `tfsdk:"restrictions"`
+	Variables          types.Map    `tfsdk:"variables"`
+	DockerSecretMounts types.Map    `tfsdk:"docker_secret_mounts"`
+	CreatedAt          types.String `tfsdk:"created_at"`
+	UpdatedAt          types.String `tfsdk:"updated_at"`
 }
 
 func (r *secretGroupResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -157,6 +158,20 @@ func (r *secretGroupResource) Schema(_ context.Context, _ resource.SchemaRequest
 				ElementType: types.StringType,
 				MarkdownDescription: "Secret variables, as a map of name to value. Values are encrypted at rest " +
 					"by Northflank, but also stored in Terraform state.",
+				Validators: []validator.Map{
+					mapvalidator.SizeAtLeast(1),
+				},
+			},
+			"docker_secret_mounts": schema.MapAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				ElementType: types.StringType,
+				MarkdownDescription: "Docker secret mounts for builds, as a map of mount ID to content, read in a " +
+					"Dockerfile with `RUN --mount=type=secret,id=<mount ID>`. Values are encrypted at rest by " +
+					"Northflank, but also stored in Terraform state. Northflank never reports mounts back, so " +
+					"changes made outside Terraform are not detected, and an imported secret group has none " +
+					"until they are configured. Leave out to keep mounts managed elsewhere; removing the " +
+					"attribute deletes the mounts it set.",
 				Validators: []validator.Map{
 					mapvalidator.SizeAtLeast(1),
 				},
@@ -383,6 +398,12 @@ func (r *secretGroupResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
+	// Mounts are left out of the payload when not configured; when they were
+	// configured before, remove them.
+	if payload.Secrets.DockerSecretMounts == nil && !state.DockerSecretMounts.IsNull() {
+		payload.Secrets.DockerSecretMounts = &map[string]secretGroupContentPayload{}
+	}
+
 	body, err := json.Marshal(payload)
 
 	if err != nil {
@@ -511,7 +532,10 @@ func secretGroupPayloadFrom(ctx context.Context, plan *secretGroupResourceModel)
 		Type:         &groupType,
 		Tags:         &tags,
 		Restrictions: restrictions,
-		Secrets:      &secretGroupSecretsPayload{Variables: variables},
+		Secrets: &secretGroupSecretsPayload{
+			Variables:          variables,
+			DockerSecretMounts: dockerSecretMountsPayload(ctx, plan.DockerSecretMounts, &diags),
+		},
 	}, diags
 }
 

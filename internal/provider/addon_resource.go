@@ -51,6 +51,7 @@ type addonResourceModel struct {
 	UID               types.String `tfsdk:"uid"`
 	AppID             types.String `tfsdk:"app_id"`
 	ProjectID         types.String `tfsdk:"project_id"`
+	StageID           types.String `tfsdk:"stage_id"`
 	Name              types.String `tfsdk:"name"`
 	Description       types.String `tfsdk:"description"`
 	Tags              types.Set    `tfsdk:"tags"`
@@ -127,6 +128,7 @@ func (r *addonResource) Schema(_ context.Context, _ resource.SchemaRequest, resp
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"stage_id": stageIDAttribute("addon"),
 			"description": schema.StringAttribute{
 				Optional: true,
 				Computed: true,
@@ -306,6 +308,7 @@ func (r *addonResource) Create(ctx context.Context, req resource.CreateRequest, 
 	payload := addonCreatePayload{
 		Name:        plan.Name.ValueString(),
 		Description: knownStringPointer(plan.Description),
+		StageID:     knownStringPointer(plan.StageID),
 		Tags:        stringsFromSet(ctx, plan.Tags, &resp.Diagnostics),
 		Type:        plan.Type.ValueString(),
 		Version:     plan.Version.ValueString(),
@@ -565,6 +568,7 @@ func applyAddon(ctx context.Context, model *addonResourceModel, addon *addonRead
 	model.AppID = types.StringValue(addon.AppID)
 	model.Name = types.StringValue(addon.Name)
 	model.Description = types.StringPointerValue(addon.Description)
+	model.StageID = types.StringPointerValue(addon.StageID)
 	model.Type = types.StringValue(addon.Spec.Type)
 	model.Status = types.StringValue(addon.Status)
 	model.RunningVersion = types.StringValue(config.VersionTag)
@@ -601,6 +605,10 @@ func applyAddon(ctx context.Context, model *addonResourceModel, addon *addonRead
 // addonPatchFrom builds a patch with only the attributes that changed.
 func addonPatchFrom(ctx context.Context, plan, state *addonResourceModel, diags *diag.Diagnostics) *addonPatchPayload {
 	patch := &addonPatchPayload{}
+
+	if v := knownStringPointer(plan.StageID); v != nil && !plan.StageID.Equal(state.StageID) {
+		patch.StageID = v
+	}
 
 	if v := knownStringPointer(plan.Description); v != nil && !plan.Description.Equal(state.Description) {
 		patch.Description = v

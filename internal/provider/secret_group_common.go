@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"regexp"
@@ -68,6 +69,39 @@ type secretGroupObjectPayload struct {
 
 type secretGroupSecretsPayload struct {
 	Variables map[string]string `json:"variables"`
+
+	// Left out unless configured, so that mounts made in the dashboard
+	// survive updates of groups that do not manage them.
+	DockerSecretMounts *map[string]secretGroupContentPayload `json:"dockerSecretMounts,omitempty"`
+}
+
+// secretGroupContentPayload is the content of a Docker secret mount. The API
+// only takes base64 data; the encoding describes the decoded content.
+type secretGroupContentPayload struct {
+	Data     string `json:"data"`
+	Encoding string `json:"encoding"`
+}
+
+// dockerSecretMountsPayload encodes the configured mounts, or returns nil when
+// none are configured.
+func dockerSecretMountsPayload(ctx context.Context, value types.Map, diags *diag.Diagnostics) *map[string]secretGroupContentPayload {
+	if value.IsNull() || value.IsUnknown() {
+		return nil
+	}
+
+	var contents map[string]string
+	diags.Append(value.ElementsAs(ctx, &contents, false)...)
+
+	mounts := make(map[string]secretGroupContentPayload, len(contents))
+
+	for id, content := range contents {
+		mounts[id] = secretGroupContentPayload{
+			Data:     base64.StdEncoding.EncodeToString([]byte(content)),
+			Encoding: "utf-8",
+		}
+	}
+
+	return &mounts
 }
 
 // secretGroupView is the part of a secret group the provider exposes, in one
